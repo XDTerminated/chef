@@ -28,6 +28,7 @@ export default function RootLayout() {
                         <Stack.Screen name="index" />
                         <Stack.Screen name="(tabs)" />
                         <Stack.Screen name="auth/sign-in" />
+                        <Stack.Screen name="profile-setup" />
                         <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
                     </Stack>
                     <StatusBar style="auto" />

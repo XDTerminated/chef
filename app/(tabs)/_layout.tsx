@@ -1,11 +1,11 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Tabs, useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
+import FloatingAIButton from "@/components/FloatingAIButton";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
@@ -38,34 +38,44 @@ export default function TabLayout() {
     }
 
     return (
-        <Tabs
-            screenOptions={{
-                tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
-                headerShown: false,
-                tabBarButton: HapticTab,
-            }}
-        >
-            <Tabs.Screen
-                name="index"
-                options={{
-                    title: "Home",
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+        <View style={{ flex: 1 }}>
+            <Tabs
+                screenOptions={{
+                    tabBarActiveTintColor: "#FF8C00",
+                    headerShown: false,
+                    tabBarButton: HapticTab,
                 }}
-            />
-            <Tabs.Screen
-                name="explore"
-                options={{
-                    title: "Recipes",
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
-                }}
-            />
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: "Profile",
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
-                }}
-            />
-        </Tabs>
+            >
+                <Tabs.Screen
+                    name="discovery"
+                    options={{
+                        title: "Discovery",
+                        tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
+                    }}
+                />
+                <Tabs.Screen
+                    name="create"
+                    options={{
+                        title: "Create",
+                        tabBarIcon: ({ color }) => <IconSymbol size={28} name="plus.circle.fill" color={color} />,
+                    }}
+                />
+                <Tabs.Screen
+                    name="saved"
+                    options={{
+                        title: "Saved",
+                        tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
+                    }}
+                />
+                <Tabs.Screen
+                    name="profile"
+                    options={{
+                        title: "Profile",
+                        tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+                    }}
+                />
+            </Tabs>
+            <FloatingAIButton />
+        </View>
     );
 }
