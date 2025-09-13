@@ -1,6 +1,6 @@
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
 
 export default function DiscoveryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,16 +178,53 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   categoryCard: {
-    backgroundColor: '#FF8C00',
+    backgroundColor: '#f5f5f5',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  categoryCardSelected: {
+    backgroundColor: '#FF8C00',
+    borderColor: '#FF8C00',
   },
   categoryText: {
-    color: '#fff',
+    color: '#666',
     fontWeight: '600',
     fontSize: 14,
+  },
+  categoryTextSelected: {
+    color: '#fff',
+  },
+  filtersContainer: {
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  filtersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  activeFilters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterTag: {
+    backgroundColor: '#fff5e6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ffe0b3',
+  },
+  filterTagText: {
+    fontSize: 12,
+    color: '#FF8C00',
+    fontWeight: '500',
   },
   recipesGrid: {
     flexDirection: 'row',
