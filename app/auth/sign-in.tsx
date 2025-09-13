@@ -1,7 +1,7 @@
 import { useAuth, useOAuth } from "@clerk/clerk-expo";
-import { Redirect } from "expo-router";
+import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useWarmUpBrowser } from "../../hooks/useWarmUpBrowser";
@@ -13,15 +13,24 @@ export default function SignInScreen() {
     const { isSignedIn, isLoaded } = useAuth();
     const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
     const [isLoading, setIsLoading] = useState(false);
+    const router = useRouter();
+
+    useEffect(() => {
+        if (isLoaded && isSignedIn) {
+            router.replace("/(tabs)");
+        }
+    }, [isLoaded, isSignedIn, router]);
 
     const onPress = React.useCallback(async () => {
         setIsLoading(true);
         try {
+            // For Android, don't specify redirectUrl to use default behavior
+            // which should work better with the catch-all route we created
             const { createdSessionId, setActive } = await startOAuthFlow();
 
             if (createdSessionId) {
                 await setActive!({ session: createdSessionId });
-                // Don't manually navigate - let the auth state change handle it
+                // Don't manually navigate - useEffect will handle it
             }
         } catch (err) {
             console.error("OAuth error", err);
@@ -39,9 +48,13 @@ export default function SignInScreen() {
         );
     }
 
-    // Redirect to tabs if already signed in
+    // Don't render anything if signed in - let useEffect handle redirect
     if (isSignedIn) {
-        return <Redirect href="/(tabs)" />;
+        return (
+            <View style={[styles.container, styles.content]}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
     }
 
     return (

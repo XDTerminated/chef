@@ -1,22 +1,26 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { Redirect } from "expo-router";
+import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
     const { isSignedIn, isLoaded } = useAuth();
+    const router = useRouter();
 
-    // Show loading while auth state is being determined
-    if (!isLoaded) {
-        return (
-            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-                <ActivityIndicator size="large" />
-            </View>
-        );
-    }
+    useEffect(() => {
+        if (isLoaded) {
+            if (isSignedIn) {
+                router.replace("/(tabs)");
+            } else {
+                router.replace("/auth/sign-in");
+            }
+        }
+    }, [isLoaded, isSignedIn, router]);
 
-    if (isSignedIn) {
-        return <Redirect href="/(tabs)" />;
-    }
-
-    return <Redirect href="/auth/sign-in" />;
+    // Always show loading during initial auth check
+    return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator size="large" />
+        </View>
+    );
 }

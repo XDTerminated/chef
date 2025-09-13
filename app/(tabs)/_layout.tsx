@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { Redirect, Tabs } from "expo-router";
-import React from "react";
+import { Tabs, useRouter } from "expo-router";
+import React, { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -9,11 +10,31 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
     const colorScheme = useColorScheme();
-    const { isSignedIn } = useAuth();
+    const { isSignedIn, isLoaded } = useAuth();
+    const router = useRouter();
 
-    // Redirect to sign-in if not authenticated
+    useEffect(() => {
+        if (isLoaded && !isSignedIn) {
+            router.replace("/auth/sign-in");
+        }
+    }, [isLoaded, isSignedIn, router]);
+
+    // Show loading while checking auth
+    if (!isLoaded) {
+        return (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    // Show loading while redirecting if not signed in
     if (!isSignedIn) {
-        return <Redirect href="/auth/sign-in" />;
+        return (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
     }
 
     return (
