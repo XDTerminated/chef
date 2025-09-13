@@ -1,11 +1,14 @@
-import { pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { json, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // Users table with Clerk integration
 export const users = pgTable("users", {
     id: serial("id").primaryKey(),
     clerkId: varchar("clerk_id", { length: 256 }).unique().notNull(),
-    name: varchar("name", { length: 256 }),
-    email: varchar("email", { length: 256 }).unique(),
+    email: varchar("email", { length: 256 }).unique().notNull(),
+    firstName: varchar("first_name", { length: 100 }),
+    lastName: varchar("last_name", { length: 100 }),
+    preferences: json("preferences").$type<string[]>().default([]),
+    dietaryRestrictions: json("dietary_restrictions").$type<string[]>().default([]),
     imageUrl: varchar("image_url", { length: 512 }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

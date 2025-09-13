@@ -1,10 +1,5 @@
-// Mock database for React Native compatibility
-// In production, you'd want to create API endpoints that run on a server
-// and make HTTP requests from your React Native app
+// For React Native, we'll use API calls instead of direct database connections
+// The actual database operations will be handled by server-side API endpoints
 
-// For now, we'll use local storage simulation
-
-export const db = {
-    // Mock database operations for React Native
-    // In production, these would be HTTP requests to your backend API
-};
+// Export schema for use in other files
+export * from './schema';

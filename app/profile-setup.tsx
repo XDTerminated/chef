@@ -1,7 +1,8 @@
 import { useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { userAPI } from '../lib/api/users';
 
 interface Tag {
   id: string;
@@ -14,6 +15,8 @@ export default function ProfileSetupScreen() {
   const { user } = useUser();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingExistingUser, setIsCheckingExistingUser] = useState(true);
   const [dietaryPreferences, setDietaryPreferences] = useState<Tag[]>([
     { id: 'dairy-free', label: 'Dairy Free', selected: false },
     { id: 'gluten-free', label: 'Gluten Free', selected: false },
@@ -43,6 +46,40 @@ export default function ProfileSetupScreen() {
     { id: 'thai', label: 'Thai', selected: false },
   ]);
 
+  // Check if user already exists in database
+  useEffect(() => {
+    const checkExistingUser = async () => {
+      if (!user) {
+        setIsCheckingExistingUser(false);
+        return;
+      }
+
+      try {
+        console.log('Checking for existing user:', user.id);
+        const existingUser = await userAPI.getUserByClerkId(user.id);
+        
+        if (existingUser) {
+          console.log('User already exists, skipping profile setup:', existingUser);
+          // User already exists, skip profile setup and go to main app
+          router.replace('/(tabs)/discovery');
+          return;
+        }
+        
+        console.log('User not found, proceeding with profile setup');
+        // Pre-fill name fields if available from Clerk
+        if (user.firstName) setFirstName(user.firstName);
+        if (user.lastName) setLastName(user.lastName);
+      } catch (error) {
+        console.error('Error checking existing user:', error);
+        // If there's an error checking, proceed with profile setup
+      } finally {
+        setIsCheckingExistingUser(false);
+      }
+    };
+
+    checkExistingUser();
+  }, [user, router]);
+
   const toggleTag = (tagId: string, type: 'dietary' | 'cuisine') => {
     if (type === 'dietary') {
       setDietaryPreferences(prev => 
@@ -59,20 +96,48 @@ export default function ProfileSetupScreen() {
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!firstName.trim() || !lastName.trim()) {
       Alert.alert('Required Fields', 'Please enter your first and last name.');
       return;
     }
 
-    // Log the collected data for now
-    console.log('Profile Setup Complete!');
-    console.log('Name:', firstName.trim(), lastName.trim());
-    console.log('Dietary Preferences:', dietaryPreferences.filter(tag => tag.selected).map(tag => tag.label));
-    console.log('Favorite Cuisines:', favoriteCuisines.filter(tag => tag.selected).map(tag => tag.label));
-    
-    // Navigate to the main app - discovery tab
-    router.replace('/(tabs)/discovery');
+    if (!user) {
+      Alert.alert('Error', 'User not found. Please try signing in again.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // First, create or update the user in our database
+      await userAPI.createOrUpdateUser({
+        clerkId: user.id,
+        email: user.emailAddresses[0]?.emailAddress || '',
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        imageUrl: user.imageUrl,
+      });
+
+      // Then update with preferences and dietary restrictions
+      await userAPI.updateUserProfile(user.id, {
+        preferences: favoriteCuisines.filter(tag => tag.selected).map(tag => tag.label),
+        dietaryRestrictions: dietaryPreferences.filter(tag => tag.selected).map(tag => tag.label),
+      });
+
+      console.log('Profile Setup Complete!');
+      console.log('Name:', firstName.trim(), lastName.trim());
+      console.log('Dietary Preferences:', dietaryPreferences.filter(tag => tag.selected).map(tag => tag.label));
+      console.log('Favorite Cuisines:', favoriteCuisines.filter(tag => tag.selected).map(tag => tag.label));
+      
+      // Navigate to the main app - discovery tab
+      router.replace('/(tabs)/discovery');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', 'Failed to save your profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderTag = (tag: Tag, type: 'dietary' | 'cuisine') => (
@@ -92,6 +157,16 @@ export default function ProfileSetupScreen() {
       </Text>
     </Pressable>
   );
+
+  // Show loading screen while checking for existing user
+  if (isCheckingExistingUser) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#FF8C00" />
+        <Text style={styles.loadingText}>Checking your profile...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -145,8 +220,16 @@ export default function ProfileSetupScreen() {
         </View>
 
         {/* Complete Button */}
-        <Pressable style={styles.completeButton} onPress={handleComplete}>
-          <Text style={styles.completeButtonText}>Complete Setup</Text>
+        <Pressable 
+          style={[styles.completeButton, isLoading && styles.completeButtonDisabled]} 
+          onPress={handleComplete}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.completeButtonText}>Complete Setup</Text>
+          )}
         </Pressable>
       </View>
     </ScrollView>
@@ -237,10 +320,23 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 40,
   },
+  completeButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
   completeButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 16,
     textAlign: 'center',
   },
 });
