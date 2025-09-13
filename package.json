@@ -17,6 +17,7 @@
     "dependencies": {
         "@clerk/clerk-expo": "^2.15.0",
         "@expo/vector-icons": "^15.0.2",
+        "@libsql/client": "^0.15.15",
         "@react-navigation/bottom-tabs": "^7.4.0",
         "@react-navigation/elements": "^2.6.3",
         "@react-navigation/native": "^7.1.8",
@@ -33,7 +34,6 @@
         "expo-symbols": "~1.0.7",
         "expo-system-ui": "~6.0.7",
         "expo-web-browser": "~15.0.7",
-        "postgres": "^3.4.7",
         "react": "19.1.0",
         "react-dom": "19.1.0",
         "react-native": "0.81.4",

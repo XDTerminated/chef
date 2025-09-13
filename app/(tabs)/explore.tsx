@@ -1,112 +1,137 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import ParallaxScrollView from "@/components/parallax-scroll-view";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { recipeOperations } from "@/lib/db/operations";
+import type { Recipe } from "@/lib/db/schema";
+import { useEffect, useState } from "react";
+import { FlatList, Pressable, StyleSheet } from "react-native";
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+export default function RecipesScreen() {
+    const [recipes, setRecipes] = useState<Recipe[]>([]);
+    const [loading, setLoading] = useState(true);
 
-export default function TabTwoScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
-  );
+    useEffect(() => {
+        loadRecipes();
+    }, []);
+
+    const loadRecipes = async () => {
+        try {
+            const allRecipes = await recipeOperations.getAll();
+            setRecipes(allRecipes);
+        } catch (error) {
+            console.error("Failed to load recipes:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderRecipeItem = ({ item }: { item: Recipe }) => (
+        <Pressable style={styles.recipeCard}>
+            <ThemedView style={styles.recipeContent}>
+                <ThemedText type="subtitle" style={styles.recipeTitle}>
+                    {item.title}
+                </ThemedText>
+                <ThemedText style={styles.recipeDescription} numberOfLines={2}>
+                    {item.description || "No description available"}
+                </ThemedText>
+                <ThemedView style={styles.recipeMetadata}>
+                    <ThemedText style={styles.metadataText}>{item.cookingTime && `⏱️ ${item.cookingTime}`}</ThemedText>
+                    <ThemedText style={styles.metadataText}>{item.difficulty && `📊 ${item.difficulty}`}</ThemedText>
+                </ThemedView>
+            </ThemedView>
+        </Pressable>
+    );
+
+    if (loading) {
+        return (
+            <ParallaxScrollView headerBackgroundColor={{ light: "#FF6B35", dark: "#FF4500" }} headerImage={<IconSymbol size={310} color="#FFF" name="book.fill" style={styles.headerImage} />}>
+                <ThemedView style={styles.titleContainer}>
+                    <ThemedText type="title">Recipes</ThemedText>
+                </ThemedView>
+                <ThemedView style={styles.container}>
+                    <ThemedText>Loading recipes...</ThemedText>
+                </ThemedView>
+            </ParallaxScrollView>
+        );
+    }
+
+    return (
+        <ParallaxScrollView headerBackgroundColor={{ light: "#FF6B35", dark: "#FF4500" }} headerImage={<IconSymbol size={310} color="#FFF" name="book.fill" style={styles.headerImage} />}>
+            <ThemedView style={styles.titleContainer}>
+                <ThemedText type="title">Recipes</ThemedText>
+            </ThemedView>
+
+            {recipes.length === 0 ? (
+                <ThemedView style={styles.emptyContainer}>
+                    <IconSymbol size={64} name="book" color="#999" />
+                    <ThemedText style={styles.emptyTitle}>No Recipes Yet</ThemedText>
+                    <ThemedText style={styles.emptyDescription}>Be the first to create a recipe! Tap the + button to get started.</ThemedText>
+                </ThemedView>
+            ) : (
+                <FlatList data={recipes} renderItem={renderRecipeItem} keyExtractor={(item) => item.id.toString()} contentContainerStyle={styles.recipesList} showsVerticalScrollIndicator={false} />
+            )}
+        </ParallaxScrollView>
+    );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+    headerImage: {
+        color: "#FFF",
+        bottom: -90,
+        left: -35,
+        position: "absolute",
+    },
+    titleContainer: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    container: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 40,
+    },
+    emptyTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    emptyDescription: {
+        textAlign: "center",
+        opacity: 0.7,
+    },
+    recipesList: {
+        padding: 16,
+    },
+    recipeCard: {
+        marginBottom: 16,
+        borderRadius: 12,
+        overflow: "hidden",
+    },
+    recipeContent: {
+        padding: 16,
+    },
+    recipeTitle: {
+        marginBottom: 8,
+    },
+    recipeDescription: {
+        opacity: 0.7,
+        marginBottom: 12,
+    },
+    recipeMetadata: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+    metadataText: {
+        fontSize: 12,
+        opacity: 0.6,
+    },
 });

@@ -1,24 +1,10 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+// Mock database for React Native compatibility
+// In production, you'd want to create API endpoints that run on a server
+// and make HTTP requests from your React Native app
 
-// Fix for "localStorage is not defined" in React Native
-if (typeof global !== "undefined") {
-    global.localStorage = {
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {},
-        clear: () => {},
-        key: () => null,
-        length: 0,
-    };
-}
+// For now, we'll use local storage simulation
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-    throw new Error("DATABASE_URL is not defined in environment variables");
-}
-
-// Disable prefetch as it is not supported for "Transaction" pool mode
-export const client = postgres(connectionString, { prepare: false });
-export const db = drizzle(client);
+export const db = {
+    // Mock database operations for React Native
+    // In production, these would be HTTP requests to your backend API
+};
