@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useUser } from "@clerk/clerk-expo";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { IconSymbol } from "../../components/ui/icon-symbol";
+import { kaggleRecipeService } from "../../lib/services/kaggle-recipes";
 import { searchRecipes } from "../../lib/services/recipe-search";
 
 interface Recipe {
@@ -16,13 +19,40 @@ interface Recipe {
 }
 
 export default function DiscoveryScreen() {
+    const { user } = useUser();
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<Recipe[]>([]);
+    const [forYouRecipes, setForYouRecipes] = useState<Recipe[]>([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [isLoadingForYou, setIsLoadingForYou] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
+    const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+    const [hasMoreRecipes, setHasMoreRecipes] = useState(true);
 
-    const categories = ["Italian", "Indian", "Mediterranean", "Asian", "Mexican", "American"];
+    // Load personalized recipes on component mount
+    useEffect(() => {
+        const loadForYouRecipes = async () => {
+            if (!user?.id) return;
+
+            try {
+                setIsLoadingForYou(true);
+                console.log("🎯 Loading personalized recipes for user:", user.id);
+                const personalizedRecipes = await kaggleRecipeService.getForYouRecipes(user.id, 4);
+                setForYouRecipes(personalizedRecipes);
+                setHasMoreRecipes(personalizedRecipes.length === 4); // If we got 4, there might be more
+                console.log("✅ Loaded", personalizedRecipes.length, "personalized recipes");
+            } catch (error) {
+                console.error("❌ Error loading personalized recipes:", error);
+                // Fallback to empty array
+                setForYouRecipes([]);
+            } finally {
+                setIsLoadingForYou(false);
+            }
+        };
+
+        loadForYouRecipes();
+    }, [user?.id]);
 
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
@@ -45,9 +75,134 @@ export default function DiscoveryScreen() {
         }
     };
 
+    const loadMoreRecipes = async () => {
+        console.log("🔄 loadMoreRecipes called with:", {
+            userId: user?.id,
+            isLoadingMore,
+            hasMoreRecipes,
+            currentCount: forYouRecipes.length,
+        });
+
+        if (!user?.id || isLoadingMore || !hasMoreRecipes) {
+            console.log("❌ loadMoreRecipes blocked:", {
+                noUser: !user?.id,
+                isLoadingMore,
+                noMoreRecipes: !hasMoreRecipes,
+            });
+            return;
+        }
+
+        try {
+            setIsLoadingMore(true);
+            console.log("📚 Loading more recipes... Currently have:", forYouRecipes.length);
+
+            // Load 4 more recipes starting from current count (offset)
+            const moreRecipes = await kaggleRecipeService.getForYouRecipes(user.id, 4, forYouRecipes.length);
+            console.log("📥 Received more recipes:", moreRecipes.length);
+
+            if (moreRecipes.length > 0) {
+                // Filter out any duplicates (though unlikely with proper service implementation)
+                const newRecipes = moreRecipes.filter((newRecipe: Recipe) => !forYouRecipes.some((existingRecipe: Recipe) => existingRecipe.id === newRecipe.id));
+                console.log("🔍 After filtering duplicates:", newRecipes.length);
+
+                if (newRecipes.length > 0) {
+                    setForYouRecipes((prev) => [...prev, ...newRecipes]);
+                    console.log("✅ Loaded", newRecipes.length, "more recipes. Total:", forYouRecipes.length + newRecipes.length);
+                }
+
+                // If we got fewer than 4 new recipes, we might have reached the end
+                setHasMoreRecipes(moreRecipes.length === 4);
+            } else {
+                setHasMoreRecipes(false);
+                console.log("🏁 No more recipes available");
+            }
+        } catch (error) {
+            console.error("❌ Error loading more recipes:", error);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
+    const handleScroll = (event: any) => {
+        const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+        // Check if user is close to the bottom (within 100 pixels)
+        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+
+        console.log("📱 Scroll Debug:", {
+            layoutHeight: layoutMeasurement.height,
+            scrollOffset: contentOffset.y,
+            contentSize: contentSize.height,
+            isCloseToBottom,
+            isLoadingMore,
+            hasMoreRecipes,
+            hasSearched,
+        });
+
+        if (isCloseToBottom && !isLoadingMore && hasMoreRecipes && !hasSearched) {
+            console.log("🚀 Triggering loadMoreRecipes!");
+            loadMoreRecipes();
+        }
+    };
+
+    if (selectedRecipe) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <ScrollView style={styles.detailContainer}>
+                    {/* Header with back button */}
+                    <View style={styles.detailHeader}>
+                        <Pressable style={styles.backButton} onPress={() => setSelectedRecipe(null)}>
+                            <IconSymbol name="chevron.left" size={24} color="#333" />
+                            <Text style={styles.backText}>Back</Text>
+                        </Pressable>
+                    </View>
+
+                    {/* Recipe Image */}
+                    {selectedRecipe.images && selectedRecipe.images.length > 0 && <Image source={{ uri: selectedRecipe.images[0] }} style={styles.detailImage} resizeMode="cover" />}
+
+                    {/* Recipe Title and Info */}
+                    <View style={styles.detailContent}>
+                        <Text style={styles.detailTitle}>{selectedRecipe.title}</Text>
+
+                        <View style={styles.recipeInfo}>
+                            <Text style={styles.infoText}>🕒 {selectedRecipe.cookTime}</Text>
+                            <Text style={styles.infoText}>📊 {selectedRecipe.difficulty}</Text>
+                        </View>
+
+                        <Text style={styles.detailDescription}>{selectedRecipe.description}</Text>
+
+                        {/* Ingredients Section */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Ingredients</Text>
+                            {selectedRecipe.ingredients.map((ingredient, index) => (
+                                <View key={index} style={styles.ingredientItem}>
+                                    <Text style={styles.bullet}>•</Text>
+                                    <Text style={styles.ingredientText}>{ingredient}</Text>
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* Instructions Section */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>Instructions</Text>
+                            {selectedRecipe.instructions.map((instruction, index) => (
+                                <View key={index} style={styles.instructionItem}>
+                                    <View style={styles.stepNumber}>
+                                        <Text style={styles.stepNumberText}>{index + 1}</Text>
+                                    </View>
+                                    <Text style={styles.instructionText}>{instruction}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.content}>
+            <ScrollView style={styles.content} onScroll={handleScroll} scrollEventThrottle={16}>
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.title}>Discover Recipes</Text>
@@ -59,41 +214,18 @@ export default function DiscoveryScreen() {
                     <View style={styles.searchBar}>
                         <TextInput style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} placeholder="Search recipes, ingredients, or cuisines..." placeholderTextColor="#999" returnKeyType="search" onSubmitEditing={handleSearch} />
                         <Pressable style={styles.searchButton} onPress={handleSearch} disabled={isSearching || !searchQuery.trim()}>
-                            {isSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchButtonText}>🔍</Text>}
+                            {isSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchButtonText}>Search</Text>}
                         </Pressable>
                     </View>
                 </View>
 
-                {/* Categories */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Categories</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
-                        <Pressable key="all" style={[styles.categoryCard, selectedCategory === null && styles.categoryCardSelected]} onPress={() => setSelectedCategory(null)}>
-                            <Text style={[styles.categoryText, selectedCategory === null && styles.categoryTextSelected]}>All</Text>
-                        </Pressable>
-                        {categories.map((category) => (
-                            <Pressable key={category} style={[styles.categoryCard, selectedCategory === category && styles.categoryCardSelected]} onPress={() => setSelectedCategory(category)}>
-                                <Text style={[styles.categoryText, selectedCategory === category && styles.categoryTextSelected]}>{category}</Text>
-                            </Pressable>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                {/* Active Filters Display */}
-                {(searchQuery || selectedCategory) && (
+                {/* Active Search Filter Display */}
+                {searchQuery && (
                     <View style={styles.filtersContainer}>
-                        <Text style={styles.filtersTitle}>Active Filters:</Text>
                         <View style={styles.activeFilters}>
-                            {searchQuery && (
-                                <View style={styles.filterTag}>
-                                    <Text style={styles.filterTagText}>Search: &ldquo;{searchQuery}&rdquo;</Text>
-                                </View>
-                            )}
-                            {selectedCategory && (
-                                <View style={styles.filterTag}>
-                                    <Text style={styles.filterTagText}>Category: {selectedCategory}</Text>
-                                </View>
-                            )}
+                            <View style={styles.filterTag}>
+                                <Text style={styles.filterTagText}>Searching: &ldquo;{searchQuery}&rdquo;</Text>
+                            </View>
                         </View>
                     </View>
                 )}
@@ -105,7 +237,7 @@ export default function DiscoveryScreen() {
                         {searchResults.length > 0 && (
                             <View style={styles.searchResultsGrid}>
                                 {searchResults.map((recipe) => (
-                                    <Pressable key={recipe.id} style={styles.searchResultCard}>
+                                    <Pressable key={recipe.id} style={styles.searchResultCard} onPress={() => setSelectedRecipe(recipe)}>
                                         {recipe.images && recipe.images.length > 0 ? (
                                             <Image source={{ uri: recipe.images[0] }} style={styles.searchResultImage} resizeMode="cover" />
                                         ) : (
@@ -136,41 +268,56 @@ export default function DiscoveryScreen() {
                     </View>
                 )}
 
-                {/* For You - Only show if no search results */}
+                {/* For You - Personalized recommendations based on user preferences */}
                 {(!hasSearched || searchResults.length === 0) && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>For You</Text>
-                        <View style={styles.recipesGrid}>
-                            {[1, 2, 3, 4].map((item) => (
-                                <Pressable key={item} style={styles.recipeCard}>
-                                    <View style={styles.recipeImagePlaceholder}>
-                                        <Text style={styles.recipeImageText}>🍳</Text>
-                                    </View>
-                                    <Text style={styles.recipeTitle}>Recipe {item}</Text>
-                                    <Text style={styles.recipeSubtitle}>30 min • 4.5 ⭐</Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                    </View>
-                )}
+                        {isLoadingForYou ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="large" color="#FF8C00" />
+                                <Text style={styles.loadingText}>Loading personalized recipes...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.recipesGrid}>
+                                {forYouRecipes.map((recipe) => (
+                                    <Pressable key={recipe.id} style={styles.recipeCard} onPress={() => setSelectedRecipe(recipe)}>
+                                        {recipe.images && recipe.images.length > 0 ? (
+                                            <Image source={{ uri: recipe.images[0] }} style={styles.recipeImage} resizeMode="cover" />
+                                        ) : (
+                                            <View style={styles.recipeImagePlaceholder}>
+                                                <Text style={styles.recipeImageText}>🍳</Text>
+                                            </View>
+                                        )}
+                                        <View style={styles.recipeContent}>
+                                            <Text style={styles.recipeTitle} numberOfLines={2}>
+                                                {recipe.title}
+                                            </Text>
+                                            <Text style={styles.recipeSubtitle}>
+                                                {recipe.cookTime} • {recipe.difficulty}
+                                            </Text>
+                                        </View>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
 
-                {/* Featured Recipes - Only show if no search results */}
-                {(!hasSearched || searchResults.length === 0) && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Featured Recipes</Text>
-                        <View style={styles.trendingList}>
-                            {[1, 2, 3].map((item) => (
-                                <Pressable key={item} style={styles.trendingItem}>
-                                    <View style={styles.trendingImagePlaceholder}>
-                                        <Text style={styles.trendingImageText}>🔥</Text>
-                                    </View>
-                                    <View style={styles.trendingContent}>
-                                        <Text style={styles.trendingTitle}>Trending Recipe {item}</Text>
-                                        <Text style={styles.trendingSubtitle}>Quick & Easy • 25 min</Text>
-                                    </View>
-                                </Pressable>
-                            ))}
-                        </View>
+                        {/* Loading more recipes indicator */}
+                        {isLoadingMore && (
+                            <View style={styles.loadingMoreContainer}>
+                                <ActivityIndicator size="small" color="#FF8C00" />
+                                <Text style={styles.loadingMoreText}>Loading more recipes...</Text>
+                            </View>
+                        )}
+
+                        {/* Debug button to test loading more (remove this later) */}
+                        {!isLoadingMore && hasMoreRecipes && (
+                            <Pressable style={styles.debugButton} onPress={loadMoreRecipes}>
+                                <Text style={styles.debugButtonText}>Load More Recipes (Debug)</Text>
+                            </Pressable>
+                        )}
+
+                        {/* Add some padding at the bottom to ensure scrollability */}
+                        <View style={styles.bottomPadding} />
                     </View>
                 )}
             </ScrollView>
@@ -202,34 +349,46 @@ const styles = StyleSheet.create({
         color: "#666",
     },
     searchContainer: {
-        marginBottom: 30,
+        marginBottom: 25,
+        paddingHorizontal: 4,
     },
     searchBar: {
-        backgroundColor: "#f5f5f5",
-        borderRadius: 12,
+        backgroundColor: "#fff",
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: "#e0e0e0",
         flexDirection: "row",
         alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     searchInput: {
         fontSize: 16,
         color: "#333",
         flex: 1,
-        padding: 16,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
     },
     searchButton: {
         backgroundColor: "#FF8C00",
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
         paddingVertical: 12,
-        borderRadius: 8,
+        borderRadius: 12,
         marginRight: 8,
-        minWidth: 50,
         alignItems: "center",
         justifyContent: "center",
+        minWidth: 80,
     },
     searchButtonText: {
-        fontSize: 18,
+        fontSize: 16,
+        color: "#fff",
+        fontWeight: "600",
     },
     section: {
         marginBottom: 30,
@@ -240,39 +399,9 @@ const styles = StyleSheet.create({
         color: "#333",
         marginBottom: 16,
     },
-    categoriesContainer: {
-        marginBottom: 10,
-    },
-    categoryCard: {
-        backgroundColor: "#f5f5f5",
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 20,
-        marginRight: 12,
-        borderWidth: 1,
-        borderColor: "#e0e0e0",
-    },
-    categoryCardSelected: {
-        backgroundColor: "#FF8C00",
-        borderColor: "#FF8C00",
-    },
-    categoryText: {
-        color: "#666",
-        fontWeight: "600",
-        fontSize: 14,
-    },
-    categoryTextSelected: {
-        color: "#fff",
-    },
     filtersContainer: {
         marginBottom: 20,
         paddingHorizontal: 4,
-    },
-    filtersTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#333",
-        marginBottom: 8,
     },
     activeFilters: {
         flexDirection: "row",
@@ -282,13 +411,13 @@ const styles = StyleSheet.create({
     filterTag: {
         backgroundColor: "#fff5e6",
         paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingVertical: 8,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: "#ffe0b3",
     },
     filterTagText: {
-        fontSize: 12,
+        fontSize: 13,
         color: "#FF8C00",
         fontWeight: "500",
     },
@@ -428,5 +557,154 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: "#888",
         fontStyle: "italic",
+    },
+    // Detail view styles
+    detailContainer: {
+        flex: 1,
+    },
+    detailHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#f0f0f0",
+        backgroundColor: "#fff",
+    },
+    backButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    backText: {
+        fontSize: 16,
+        color: "#333",
+        fontWeight: "600",
+    },
+    detailImage: {
+        width: "100%",
+        height: 250,
+    },
+    detailContent: {
+        padding: 20,
+    },
+    detailTitle: {
+        fontSize: 28,
+        fontWeight: "800",
+        color: "#333",
+        marginBottom: 12,
+        lineHeight: 34,
+    },
+    recipeInfo: {
+        flexDirection: "row",
+        gap: 16,
+        marginBottom: 16,
+    },
+    infoText: {
+        fontSize: 14,
+        color: "#666",
+        fontWeight: "500",
+    },
+    detailDescription: {
+        fontSize: 16,
+        color: "#555",
+        lineHeight: 24,
+        marginBottom: 24,
+    },
+    ingredientItem: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        marginBottom: 8,
+        paddingRight: 16,
+    },
+    bullet: {
+        fontSize: 16,
+        color: "#FF8C00",
+        marginRight: 12,
+        marginTop: 2,
+        fontWeight: "bold",
+    },
+    ingredientText: {
+        fontSize: 16,
+        color: "#333",
+        lineHeight: 24,
+        flex: 1,
+    },
+    instructionItem: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        marginBottom: 16,
+        paddingRight: 16,
+    },
+    stepNumber: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: "#FF8C00",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 12,
+        marginTop: 2,
+    },
+    stepNumberText: {
+        fontSize: 14,
+        color: "#fff",
+        fontWeight: "700",
+    },
+    instructionText: {
+        fontSize: 16,
+        color: "#333",
+        lineHeight: 24,
+        flex: 1,
+    },
+    // Loading styles
+    loadingContainer: {
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 40,
+        gap: 12,
+    },
+    loadingText: {
+        fontSize: 16,
+        color: "#666",
+        textAlign: "center",
+    },
+    loadingMoreContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 20,
+        gap: 8,
+    },
+    loadingMoreText: {
+        fontSize: 14,
+        color: "#666",
+        textAlign: "center",
+    },
+    debugButton: {
+        backgroundColor: "#FF8C00",
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 16,
+        alignItems: "center",
+    },
+    debugButtonText: {
+        color: "#fff",
+        fontWeight: "600",
+        fontSize: 14,
+    },
+    bottomPadding: {
+        height: 200,
+    },
+    // Recipe card styles
+    recipeImage: {
+        width: "100%",
+        height: 120,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    recipeContent: {
+        gap: 4,
     },
 });

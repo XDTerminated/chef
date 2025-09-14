@@ -41,9 +41,11 @@ function convertToolhouseToRecipe(toolhouseRecipe: ToolhouseRecipe, query: strin
 async function searchRecipes(query: string): Promise<Recipe[]> {
     try {
         console.warn("🔍 Starting recipe search with query:", query);
+        console.warn("🚀 RECIPE SEARCH FUNCTION CALLED - YOUR IMAGE API WILL BE USED!");
+        console.warn("📝 About to call Toolhouse, then extract images with:", "https://hackez-name-extraction.hf.space/extract");
 
         const requestPayload = {
-            message: `Find recipes for: ${query}. Please provide detailed recipes with ingredients, instructions, cooking time, and difficulty level.`,
+            message: `Find recipes for: ${query}. Please provide detailed recipes with ingredients, instructions, cooking time, and difficulty level. IMPORTANT: Please include the source URL from allrecipes.com for each recipe in the 'source' field.`,
         };
 
         console.warn("📤 Sending Toolhouse request:");
@@ -117,8 +119,20 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
                 instructions: recipe.instructions.length + " steps",
                 cookTime: recipe.cookTime,
                 difficulty: recipe.difficulty,
-                sourceUrl: recipe.sourceUrl || "none",
+                sourceUrl: recipe.sourceUrl || "❌ NO SOURCE URL",
             });
+
+            // Log the full sourceUrl for debugging
+            if (recipe.sourceUrl) {
+                console.warn(`🔗 Full sourceUrl for "${recipe.title}": ${recipe.sourceUrl}`);
+                if (recipe.sourceUrl.includes("allrecipes.com")) {
+                    console.warn(`✅ AllRecipes URL detected - will extract images`);
+                } else {
+                    console.warn(`⚠️ Non-AllRecipes URL - may not extract images properly`);
+                }
+            } else {
+                console.warn(`❌ No sourceUrl found for "${recipe.title}" - will use placeholders`);
+            }
         });
 
         // Extract images for each recipe
@@ -129,20 +143,30 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
                 console.warn(`\n🖼️ Processing images for Recipe ${index + 1}: ${recipe.title}`);
 
                 try {
-                    // Try to extract images from source URL if available
+                    // Try to extract images from source URL if available and if it's an AllRecipes URL
                     let images: string[] = [];
-                    if (recipe.sourceUrl) {
-                        console.warn(`📡 Source URL found: ${recipe.sourceUrl}`);
+                    if (recipe.sourceUrl && recipe.sourceUrl.includes("allrecipes.com")) {
+                        console.warn(`📡 AllRecipes URL found for "${recipe.title}": ${recipe.sourceUrl}`);
+                        console.warn(`🚀 Calling YOUR HF API: https://hackez-name-extraction.hf.space/extract with URL: ${recipe.sourceUrl}`);
                         images = await extractImages(recipe.sourceUrl, 3);
-                        console.warn(`✅ Extracted ${images.length} images from source URL`);
+                        console.warn(`✅ YOUR HF API returned ${images.length} images for "${recipe.title}"`);
+                        if (images.length > 0) {
+                            console.warn(`📸 First image URL from YOUR API: ${images[0].substring(0, 80)}...`);
+                        }
+                    } else if (recipe.sourceUrl) {
+                        console.warn(`⚠️ Non-AllRecipes URL found: ${recipe.sourceUrl} - skipping image extraction`);
                     } else {
-                        console.warn(`❌ No source URL available for recipe: ${recipe.title}`);
+                        console.warn(`❌ No source URL available for recipe: ${recipe.title} - skipping image extraction`);
                     }
 
                     // If no images found, use placeholder images
                     if (images.length === 0) {
                         console.warn(`🖼️ No images extracted, using placeholder images for: ${recipe.title}`);
-                        images = [`https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300&h=200&fit=crop&auto=format`, `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&auto=format`];
+                        // Generate different placeholder images for each recipe
+                        const placeholderImages = [`https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300&h=200&fit=crop&auto=format&sig=${index * 7}`, `https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&h=200&fit=crop&auto=format&sig=${index * 11}`, `https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=300&h=200&fit=crop&auto=format&sig=${index * 13}`, `https://images.unsplash.com/photo-1551782450-a2132b4ba21d?w=300&h=200&fit=crop&auto=format&sig=${index * 17}`, `https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300&h=200&fit=crop&auto=format&sig=${index * 19}`, `https://images.unsplash.com/photo-1484723091739-30a097e8f929?w=300&h=200&fit=crop&auto=format&sig=${index * 23}`];
+                        // Use the recipe index to pick different images
+                        const startIndex = index % 3;
+                        images = placeholderImages.slice(startIndex, startIndex + 2);
                     }
 
                     console.warn(`✅ Final image count for "${recipe.title}": ${images.length} images`);

@@ -6,10 +6,8 @@ import { ActivityIndicator, View } from "react-native";
 import FloatingAIButton from "@/components/FloatingAIButton";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
-    const colorScheme = useColorScheme();
     const { isSignedIn, isLoaded } = useAuth();
     const router = useRouter();
 
@@ -51,13 +49,6 @@ export default function TabLayout() {
                     options={{
                         title: "Discovery",
                         tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
-                    }}
-                />
-                <Tabs.Screen
-                    name="create"
-                    options={{
-                        title: "Create",
-                        tabBarIcon: ({ color }) => <IconSymbol size={28} name="plus.circle.fill" color={color} />,
                     }}
                 />
                 <Tabs.Screen
