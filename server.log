@@ -1,5 +1,0 @@
-[dotenv@17.2.2] injecting env (2) from .env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
-🚀 Chef API Server running on http://localhost:3001
-📊 Health check: http://localhost:3001/health
-👤 User endpoints: POST/PUT/GET /api/users
-🍳 Recipe endpoints: GET /api/recipes
