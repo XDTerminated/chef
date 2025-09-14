@@ -39,7 +39,12 @@ export default function DiscoveryScreen() {
                 setIsLoadingForYou(true);
                 console.log("🎯 Loading personalized recipes for user:", user.id);
                 const personalizedRecipes = await kaggleRecipeService.getForYouRecipes(user.id, 4);
-                setForYouRecipes(personalizedRecipes);
+                setForYouRecipes(
+                    personalizedRecipes.map((recipe: any) => ({
+                        ...recipe,
+                        images: recipe.images ?? [],
+                    }))
+                );
                 setHasMoreRecipes(personalizedRecipes.length === 4); // If we got 4, there might be more
                 console.log("✅ Loaded", personalizedRecipes.length, "personalized recipes");
             } catch (error) {
@@ -102,11 +107,17 @@ export default function DiscoveryScreen() {
 
             if (moreRecipes.length > 0) {
                 // Filter out any duplicates (though unlikely with proper service implementation)
-                const newRecipes = moreRecipes.filter((newRecipe: Recipe) => !forYouRecipes.some((existingRecipe: Recipe) => existingRecipe.id === newRecipe.id));
+                const newRecipes = moreRecipes.filter((newRecipe: any) => !forYouRecipes.some((existingRecipe: any) => existingRecipe.id === newRecipe.id));
                 console.log("🔍 After filtering duplicates:", newRecipes.length);
 
                 if (newRecipes.length > 0) {
-                    setForYouRecipes((prev) => [...prev, ...newRecipes]);
+                    setForYouRecipes((prev) => [
+                        ...prev,
+                        ...newRecipes.map((recipe: any) => ({
+                            ...recipe,
+                            images: recipe.images ?? [],
+                        })),
+                    ]);
                     console.log("✅ Loaded", newRecipes.length, "more recipes. Total:", forYouRecipes.length + newRecipes.length);
                 }
 
@@ -309,14 +320,15 @@ export default function DiscoveryScreen() {
                             </View>
                         )}
 
-                        {/* Debug button to test loading more (remove this later) */}
-                        {!isLoadingMore && hasMoreRecipes && (
-                            <Pressable style={styles.debugButton} onPress={loadMoreRecipes}>
-                                <Text style={styles.debugButtonText}>Load More Recipes (Debug)</Text>
-                            </Pressable>
+                        {/* End of recipes indicator */}
+                        {!hasMoreRecipes && forYouRecipes.length > 4 && (
+                            <View style={styles.endContainer}>
+                                <Text style={styles.endText}>You&apos;ve reached the end! 🍽️</Text>
+                                <Text style={styles.endSubtext}>Check back later for more delicious recipes</Text>
+                            </View>
                         )}
 
-                        {/* Add some padding at the bottom to ensure scrollability */}
+                        {/* Add padding at the bottom to ensure scrollability */}
                         <View style={styles.bottomPadding} />
                     </View>
                 )}
@@ -696,6 +708,23 @@ const styles = StyleSheet.create({
     },
     bottomPadding: {
         height: 200,
+    },
+    // End of content styles
+    endContainer: {
+        alignItems: "center",
+        paddingVertical: 30,
+        gap: 8,
+    },
+    endText: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: "#666",
+        textAlign: "center",
+    },
+    endSubtext: {
+        fontSize: 14,
+        color: "#888",
+        textAlign: "center",
     },
     // Recipe card styles
     recipeImage: {
