@@ -5,6 +5,7 @@ export interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  imageUri?: string; // Optional image attachment
 }
 
 // Global state for chat history (persists during app session, not saved to disk)

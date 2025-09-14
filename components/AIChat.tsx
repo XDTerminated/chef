@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -13,8 +14,10 @@ import {
     View,
 } from 'react-native';
 import { Message, useChatHistory } from '../hooks/useChatHistory';
+import { CapturedImage, useImageCapture } from '../hooks/useImageCapture';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { CerebrasAPI } from '../lib/services/cerebras-api';
+import { ClaudeAPI } from '../lib/services/claude-api';
 import { ContinuousSpeechInput } from './ContinuousSpeechInput';
 
 interface AIChatProps {
@@ -37,7 +40,11 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
   const [isRecording, setIsRecording] = useState(false);
   const [isMentraConnected, setIsMentraConnected] = useState(false);
   const [speechMode, setSpeechMode] = useState(false); // Toggle between typing and speech
+  const [capturedImage, setCapturedImage] = useState<CapturedImage | null>(null); // Image to be sent with message
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Image capture hook
+  const { takePhoto, selectImageFromLibrary, isLoading: isCapturingImage, isAvailable: isImageCaptureAvailable } = useImageCapture();
 
   // Text-to-speech for AI responses when in speech mode
   const { speak: speakText, stop: stopSpeaking, isAvailable: isTTSAvailable, isSpeaking: isTTSSpeaking } = useTextToSpeech({
@@ -65,41 +72,61 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
     }
   }, [speechMode, stopSpeaking]);
 
-  const getAIResponse = async (userMessage: string): Promise<string> => {
+  const getAIResponse = async (userMessage: string, image?: CapturedImage): Promise<string> => {
     try {
-      // Convert current messages to conversation history format
-      const conversationHistory = CerebrasAPI.convertChatHistory(
-        messages.map(msg => ({ text: msg.text, isUser: msg.isUser }))
-      );
-      
-      // Get response from Cerebras API
-      const cerebrasInstance = CerebrasAPI.getInstance();
-      const response = await cerebrasInstance.getCookingResponse(userMessage, conversationHistory);
-      return response;
+      // If image is provided, use Claude for analysis
+      if (image) {
+        const conversationHistory = messages
+          .slice(-6) // Last 6 messages for context
+          .map(msg => ({ text: msg.text, isUser: msg.isUser }));
+        
+        const claudeInstance = ClaudeAPI.getInstance();
+        const response = await claudeInstance.analyzeImageWithText(
+          image.base64,
+          image.type,
+          userMessage,
+          conversationHistory
+        );
+        return response;
+      } else {
+        // Use Cerebras for text-only responses
+        const conversationHistory = CerebrasAPI.convertChatHistory(
+          messages.map(msg => ({ text: msg.text, isUser: msg.isUser }))
+        );
+        
+        const cerebrasInstance = CerebrasAPI.getInstance();
+        const response = await cerebrasInstance.getCookingResponse(userMessage, conversationHistory);
+        return response;
+      }
     } catch (error) {
       console.error('Error getting AI response:', error);
       return "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment!";
     }
   };
 
-  const handleSendMessage = async (messageText?: string) => {
+  const handleSendMessage = async (messageText?: string, voiceMessage: boolean = false) => {
     const textToSend = messageText || inputText.trim();
-    if (!textToSend) return;
+    const imageToSend = capturedImage;
+    
+    // Must have either text or image
+    if (!textToSend && !imageToSend) return;
 
     const userMessage: Message = {
       id: generateId(),
-      text: textToSend,
+      text: textToSend || (imageToSend ? "What can you tell me about this image?" : ""),
       isUser: true,
       timestamp: new Date(),
+      imageUri: imageToSend?.uri,
     };
 
     addMessage(userMessage);
     setInputText('');
+    setCapturedImage(null); // Clear the captured image
     setIsTyping(true);
 
     // Get AI response
     try {
-      const aiResponseText = await getAIResponse(userMessage.text);
+      const aiResponseText = await getAIResponse(userMessage.text, imageToSend || undefined);
       const aiResponse: Message = {
         id: generateId(),
         text: aiResponseText,
@@ -199,6 +226,36 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
     }
   };
 
+  const handleCameraPress = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose how you\'d like to add a photo:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Take Photo', onPress: handleTakePhoto },
+        { text: 'Choose from Library', onPress: handleSelectFromLibrary },
+      ]
+    );
+  };
+
+  const handleTakePhoto = async () => {
+    const image = await takePhoto();
+    if (image) {
+      setCapturedImage(image);
+    }
+  };
+
+  const handleSelectFromLibrary = async () => {
+    const image = await selectImageFromLibrary();
+    if (image) {
+      setCapturedImage(image);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setCapturedImage(null);
+  };
+
   const renderMessage = (message: Message) => (
     <View
       key={message.id}
@@ -213,14 +270,27 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
           message.isUser ? styles.userBubble : styles.aiBubble,
         ]}
       >
-        <Text
-          style={[
-            styles.messageText,
-            message.isUser ? styles.userText : styles.aiText,
-          ]}
-        >
-          {message.text}
-        </Text>
+        {/* Display image if present */}
+        {message.imageUri && (
+          <Image
+            source={{ uri: message.imageUri }}
+            style={styles.messageImage}
+            resizeMode="cover"
+          />
+        )}
+        
+        {/* Display text */}
+        {message.text && (
+          <Text
+            style={[
+              styles.messageText,
+              message.isUser ? styles.userText : styles.aiText,
+              message.imageUri && styles.messageTextWithImage,
+            ]}
+          >
+            {message.text}
+          </Text>
+        )}
         <Text style={styles.timestamp}>
           {message.timestamp.toLocaleTimeString([], { 
             hour: '2-digit', 
@@ -377,9 +447,42 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
           </Pressable>
         </View>
 
+        {/* Image Preview */}
+        {capturedImage && (
+          <View style={styles.imagePreviewContainer}>
+            <Image
+              source={{ uri: capturedImage.uri }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+            />
+            <Pressable
+              style={styles.removeImageButton}
+              onPress={handleRemoveImage}
+            >
+              <Ionicons name="close-circle" size={24} color="#FF4444" />
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.inputRow}>
           {!speechMode ? (
             <>
+              {/* Camera Button */}
+              <Pressable
+                style={[
+                  styles.cameraButton,
+                  !isImageCaptureAvailable && styles.cameraButtonDisabled
+                ]}
+                onPress={handleCameraPress}
+                disabled={isCapturingImage || !isImageCaptureAvailable}
+              >
+                <Ionicons
+                  name={isCapturingImage ? "camera" : "camera-outline"}
+                  size={24}
+                  color={!isImageCaptureAvailable ? "#ccc" : (isCapturingImage ? "#999" : "#FF8C00")}
+                />
+              </Pressable>
+              
               <TextInput
                 style={styles.textInput}
                 value={inputText}
@@ -392,26 +495,43 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
               <Pressable
                 style={[
                   styles.sendButton,
-                  !inputText.trim() && styles.sendButtonDisabled,
+                  (!inputText.trim() && !capturedImage) && styles.sendButtonDisabled,
                 ]}
                 onPress={handleSendButtonPress}
-                disabled={!inputText.trim()}
+                disabled={!inputText.trim() && !capturedImage}
               >
                 <Ionicons
                   name="send"
                   size={20}
-                  color={inputText.trim() ? "#fff" : "#999"}
+                  color={(inputText.trim() || capturedImage) ? "#fff" : "#999"}
                 />
               </Pressable>
             </>
           ) : (
             <View style={styles.speechInputContainer}>
-              <Text style={styles.speechInstructionText}>
-                {ttsReady 
-                  ? "Speak naturally - responses will be spoken back to you"
-                  : "Speak naturally - rebuild required for voice responses"
-                }
-              </Text>
+              {/* Camera Button for Speech Mode */}
+              <View style={styles.speechTopRow}>
+                <Text style={styles.speechInstructionText}>
+                  {ttsReady 
+                    ? "Speak naturally - responses will be spoken back to you"
+                    : "Speak naturally - rebuild required for voice responses"
+                  }
+                </Text>
+                <Pressable
+                  style={[
+                    styles.cameraButtonSpeech,
+                    !isImageCaptureAvailable && styles.cameraButtonDisabled
+                  ]}
+                  onPress={handleCameraPress}
+                  disabled={isCapturingImage || !isImageCaptureAvailable}
+                >
+                  <Ionicons
+                    name={isCapturingImage ? "camera" : "camera-outline"}
+                    size={20}
+                    color={!isImageCaptureAvailable ? "#ccc" : (isCapturingImage ? "#999" : "#FF8C00")}
+                  />
+                </Pressable>
+              </View>
               <ContinuousSpeechInput
                 onTranscript={handleSpeechTranscript}
                 onError={(error) => {
@@ -603,6 +723,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
+  messageTextWithImage: {
+    marginTop: 8,
+  },
+  messageImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
   userText: {
     color: '#fff',
   },
@@ -630,6 +759,30 @@ const styles = StyleSheet.create({
     borderTopColor: '#e1e5e9',
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
   inputModeContainer: {
     flexDirection: 'row',
@@ -664,17 +817,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
+  cameraButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff5e6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  cameraButtonDisabled: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.5,
+  },
   speechInputContainer: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 12,
   },
+  speechTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 12,
+  },
   speechInstructionText: {
     fontSize: 13,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 12,
     fontStyle: 'italic',
+    flex: 1,
+  },
+  cameraButtonSpeech: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff5e6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   textInput: {
     flex: 1,
