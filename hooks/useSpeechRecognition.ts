@@ -107,17 +107,14 @@ export function useSpeechRecognition(
         
         // Filter out empty or very short results that are likely noise
         const transcript = result.transcript?.trim() || "";
-        if (transcript.length < 2) {
-          console.log("🔇 Ignoring very short/empty transcript:", transcript);
+        if (transcript.length < 1) { // Allow single characters for testing
+          console.log("🔇 Ignoring empty transcript:", transcript);
           return;
         }
         
-        // Filter out very low confidence results (if confidence is available)
+        // Skip confidence filtering since many devices return 0
         const confidence = result.confidence;
-        if (confidence !== undefined && confidence < 0.3) {
-          console.log("🔇 Ignoring low confidence result:", { transcript, confidence });
-          return;
-        }
+        console.log("📊 Speech confidence:", confidence, "transcript:", transcript);
         
         const newResult: SpeechRecognitionResult = {
           transcript: transcript,

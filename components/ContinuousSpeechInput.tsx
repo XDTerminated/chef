@@ -31,6 +31,68 @@ interface ContinuousSpeechInputProps {
   autoSend?: boolean; // New prop for auto-sending messages
   pauseThreshold?: number; // Milliseconds of silence before auto-sending
   isTTSSpeaking?: boolean; // Pause speech recognition when TTS is speaking
+  noisyEnvironment?: boolean; // Adjust thresholds for noisy environments
+  minTranscriptLength?: number; // Minimum words before considering valid speech
+  confidenceThreshold?: number; // Minimum confidence for speech recognition
+}
+
+// Helper function to validate speech in noisy environments
+function isValidSpeech(transcript: string, confidence?: number, options: {
+  minLength?: number;
+  confidenceThreshold?: number;
+  noisyEnvironment?: boolean;
+} = {}): boolean {
+  const {
+    minLength = 2,
+    confidenceThreshold = 0.4,
+    noisyEnvironment = false
+  } = options;
+  
+  // Filter out empty or very short results
+  if (!transcript || transcript.length < 2) {
+    return false;
+  }
+  
+  // Count meaningful words (exclude filler words and noise)
+  const words = transcript.toLowerCase().split(/\s+/).filter(word => {
+    // Filter out common filler words and noise artifacts
+    const fillerWords = ['uh', 'um', 'ah', 'er', 'hmm', 'huh', 'yeah', 'ok', 'okay'];
+    const noisePatterns = /^[^a-z]*$/; // Only punctuation/numbers
+    
+    return word.length > 1 && 
+           !fillerWords.includes(word) && 
+           !noisePatterns.test(word);
+  });
+  
+  // Require minimum meaningful words
+  if (words.length < minLength) {
+    return false;
+  }
+  
+  // Check confidence if available and not 0 (many devices report 0)
+  if (confidence !== undefined && confidence > 0) {
+    const threshold = noisyEnvironment ? confidenceThreshold * 0.8 : confidenceThreshold;
+    if (confidence < threshold) {
+      return false;
+    }
+  }
+  
+  // Additional checks for noisy environments
+  if (noisyEnvironment) {
+    // Reject very repetitive patterns (might be background noise)
+    const uniqueWords = new Set(words);
+    if (uniqueWords.size < words.length * 0.5) {
+      return false;
+    }
+    
+    // Reject if it's mostly short words (common in noise)
+    const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length;
+    if (avgWordLength < 3) {
+      return false;
+    }
+  }
+  
+  return true;
 }
 
 export function ContinuousSpeechInput({
@@ -43,6 +105,9 @@ export function ContinuousSpeechInput({
   autoSend = true,
   pauseThreshold = 2000, // 2 seconds of silence
   isTTSSpeaking = false,
+  noisyEnvironment = false,
+  minTranscriptLength = 2, // Minimum 2 words
+  confidenceThreshold = 0.4, // Lower threshold for noisy environments
 }: ContinuousSpeechInputProps) {
   const [pulseAnim] = useState(new Animated.Value(1));
   const [volumeLevel, setVolumeLevel] = useState(0);
@@ -51,6 +116,8 @@ export function ContinuousSpeechInput({
   const [lastSpeechTime, setLastSpeechTime] = useState<number | null>(null);
   const [lastSentLength, setLastSentLength] = useState(0);
   const [wasListeningBeforeTTS, setWasListeningBeforeTTS] = useState(false);
+  const [forceFinalTimer, setForceFinalTimer] = useState<number | null>(null);
+  const [isValidSpeechDetected, setIsValidSpeechDetected] = useState(false);
 
   const {
     isListening,
@@ -66,6 +133,11 @@ export function ContinuousSpeechInput({
     lang,
     onResult: (result) => {
       console.log("Continuous speech result:", result);
+      console.log("🔍 Debug info:", {
+        isFinal: result.isFinal,
+        confidence: result.confidence,
+        timestamp: Date.now()
+      });
       
       // Extract only the new part of the transcript (everything after what we've already sent)
       const fullTranscript = result.transcript;
@@ -75,13 +147,35 @@ export function ContinuousSpeechInput({
       console.log("Last sent length:", lastSentLength);
       console.log("New segment:", newSegment);
       
+      // Enhanced validation for noisy environments - temporarily disabled for testing
+      const isValid = true; // isValidSpeech(newSegment, result.confidence, {
+      //   minLength: minTranscriptLength,
+      //   confidenceThreshold,
+      //   noisyEnvironment
+      // });
+      
+      if (!isValid) {
+        console.log("🔇 Ignoring invalid speech:", { newSegment, confidence: result.confidence });
+        setIsValidSpeechDetected(false);
+        return;
+      }
+      
+      setIsValidSpeechDetected(true);
+      
       setCurrentTranscript(newSegment);
       setLastSpeechTime(Date.now());
       
-      // Clear any existing silence timer
+      // Clear any existing timers
       if (silenceTimer) {
+        console.log("🔄 Clearing existing silence timer");
         clearTimeout(silenceTimer);
         setSilenceTimer(null);
+      }
+      
+      if (forceFinalTimer) {
+        console.log("🔄 Clearing existing force timer");
+        clearTimeout(forceFinalTimer);
+        setForceFinalTimer(null);
       }
       
       // Always send results to parent component
@@ -103,19 +197,36 @@ export function ContinuousSpeechInput({
         }, 500);
       } else if (autoSend && !result.isFinal && newSegment.trim()) {
         // Set up auto-send timer for interim results after pause
+        console.log("🚀 Setting up auto-send timer with threshold:", pauseThreshold);
+        
         const timer = setTimeout(() => {
+          console.log("⏰ Auto-send timer fired! Current segment:", newSegment);
           const timeSinceLastSpeech = Date.now() - (lastSpeechTime || 0);
-          if (timeSinceLastSpeech >= pauseThreshold && newSegment.trim()) {
-            console.log("Auto-sending after pause:", newSegment);
-            onTranscript?.(newSegment, true);
+          console.log("📊 Time since last speech:", timeSinceLastSpeech);
+          
+          if (newSegment.trim()) {
+            console.log("✅ Auto-sending message:", newSegment);
+            onTranscript?.(newSegment, true); // Mark as final
             setCurrentTranscript("");
-            
-            // Update the last sent length to include this segment
             setLastSentLength(fullTranscript.length);
+            resetTranscript();
           }
         }, pauseThreshold);
         
         setSilenceTimer(timer);
+        
+        // Also set a force final timer as backup (longer than pause threshold)
+        const forceTimer = setTimeout(() => {
+          if (newSegment.trim()) {
+            console.log("🔥 Force-sending after extended period:", newSegment);
+            onTranscript?.(newSegment, true); // Force as final
+            setCurrentTranscript("");
+            setLastSentLength(fullTranscript.length);
+            resetTranscript();
+          }
+        }, pauseThreshold * 2); // Double the pause threshold as backup
+        
+        setForceFinalTimer(forceTimer);
       }
     },
     onError: (error) => {
@@ -145,6 +256,12 @@ export function ContinuousSpeechInput({
           clearTimeout(silenceTimer);
           setSilenceTimer(null);
         }
+        
+        // Clear force final timer on any error
+        if (forceFinalTimer) {
+          clearTimeout(forceFinalTimer);
+          setForceFinalTimer(null);
+        }
         return;
       }
       
@@ -156,6 +273,12 @@ export function ContinuousSpeechInput({
       if (silenceTimer) {
         clearTimeout(silenceTimer);
         setSilenceTimer(null);
+      }
+      
+      // Clear force final timer on error
+      if (forceFinalTimer) {
+        clearTimeout(forceFinalTimer);
+        setForceFinalTimer(null);
       }
     },
     onStart: () => {
@@ -176,6 +299,12 @@ export function ContinuousSpeechInput({
         clearTimeout(silenceTimer);
         setSilenceTimer(null);
       }
+      
+      // Clear force final timer when speech ends
+      if (forceFinalTimer) {
+        clearTimeout(forceFinalTimer);
+        setForceFinalTimer(null);
+      }
     },
   });
 
@@ -185,8 +314,11 @@ export function ContinuousSpeechInput({
       if (silenceTimer) {
         clearTimeout(silenceTimer);
       }
+      if (forceFinalTimer) {
+        clearTimeout(forceFinalTimer);
+      }
     };
-  }, [silenceTimer]);
+  }, [silenceTimer, forceFinalTimer]);
 
   // Pause speech recognition when TTS is speaking
   useEffect(() => {
@@ -270,8 +402,12 @@ export function ContinuousSpeechInput({
     );
   }
 
-  const microphoneColor = isTTSSpeaking ? "#FFA500" : (isListening ? "#FF4444" : (disabled ? "#999" : "#007AFF"));
-  const backgroundColor = isTTSSpeaking ? "rgba(255, 165, 0, 0.1)" : (isListening ? "rgba(255, 68, 68, 0.1)" : "rgba(0, 122, 255, 0.1)");
+  const microphoneColor = isTTSSpeaking ? "#FFA500" : 
+    (isListening ? (isValidSpeechDetected ? "#00C851" : "#FF4444") : 
+    (disabled ? "#999" : "#007AFF"));
+  const backgroundColor = isTTSSpeaking ? "rgba(255, 165, 0, 0.1)" : 
+    (isListening ? (isValidSpeechDetected ? "rgba(0, 200, 81, 0.1)" : "rgba(255, 68, 68, 0.1)") : 
+    "rgba(0, 122, 255, 0.1)");
 
   return (
     <View style={[styles.container, style]}>
@@ -326,9 +462,19 @@ export function ContinuousSpeechInput({
 
       {/* Show current transcript if available */}
       {currentTranscript && !isTTSSpeaking && (
-        <Text style={styles.transcriptText} numberOfLines={2}>
-          {currentTranscript}
-        </Text>
+        <View style={styles.transcriptContainer}>
+          <Text style={[
+            styles.transcriptText, 
+            { color: isValidSpeechDetected ? "#00C851" : "#FF4444" }
+          ]} numberOfLines={2}>
+            {currentTranscript}
+          </Text>
+          {noisyEnvironment && (
+            <Text style={styles.statusIndicator}>
+              {isValidSpeechDetected ? "✓ Valid speech" : "⚠ Background noise"}
+            </Text>
+          )}
+        </View>
       )}
       
       {/* Show TTS status */}
@@ -383,6 +529,17 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     maxWidth: 120,
     color: "#333",
+  },
+  transcriptContainer: {
+    alignItems: "center",
+    marginTop: 4,
+  },
+  statusIndicator: {
+    fontSize: 9,
+    textAlign: "center",
+    marginTop: 2,
+    color: "#666",
+    fontWeight: "500",
   },
   ttsStatusText: {
     fontSize: 11,

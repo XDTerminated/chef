@@ -589,7 +589,7 @@ What would you like to know about making this dish?`;
                   />
                 </Pressable>
               </View>
-              <ContinuousSpeechInput
+                            <ContinuousSpeechInput
                 onTranscript={handleSpeechTranscript}
                 onError={(error) => {
                   console.error("Speech input error:", error);
@@ -598,6 +598,11 @@ What would you like to know about making this dish?`;
                 size={56}
                 lang="en-US"
                 isTTSSpeaking={isTTSSpeaking}
+                pauseThreshold={800} // Very short threshold for testing - 0.8 seconds
+                autoSend={true}
+                noisyEnvironment={true}
+                minTranscriptLength={1} // Allow single words for testing
+                confidenceThreshold={0.3} // Lower confidence threshold
               />
             </View>
           )}
