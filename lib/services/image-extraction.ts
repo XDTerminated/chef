@@ -1,42 +1,74 @@
 import axios, { isAxiosError } from "axios";
 
-interface ImageExtractionRequest {
+interface ImageResult {
     url: string;
-    limit?: number;
+    score: number;
+    rank: number;
+    estimated_size?: string;
 }
 
 interface ImageExtractionResponse {
+    success: boolean;
     url: string;
-    images: string[];
-    total: number;
-    limit: number;
+    total_found: number;
+    images: ImageResult[];
+    message?: string;
 }
 
 export async function extractImages(url: string, limit: number = 5): Promise<string[]> {
     try {
-        console.log("Extracting images from:", url, "with limit:", limit);
+        console.warn("🖼️ Extracting images from:", url, "with limit:", limit);
 
-        const requestBody: ImageExtractionRequest = {
+        // Use Hugging Face Space API instead of local service
+        const apiUrl = "https://hackez-name-extraction.hf.space/extract";
+        console.warn("🌐 Using Hugging Face Space API:", apiUrl);
+
+        const requestBody = {
             url: url,
             limit: limit,
         };
 
-        const response = await axios.post<ImageExtractionResponse>("http://localhost:8000/extract", requestBody, {
+        console.warn("📤 Sending request to HF Space");
+        console.warn("📤 Request body:", JSON.stringify(requestBody, null, 2));
+
+        const response = await axios.post<ImageExtractionResponse>(apiUrl, requestBody, {
             headers: {
                 "Content-Type": "application/json",
             },
-            timeout: 15000, // 15 second timeout
+            timeout: 60000, // 60 seconds for Hugging Face API
         });
 
-        console.log(`Extracted ${response.data.images.length} images from ${url}`);
-        return response.data.images;
+        console.warn("📥 Image extraction response:", {
+            status: response.status,
+            success: response.data.success,
+            total_found: response.data.total_found,
+            images_returned: response.data.images.length,
+            message: response.data.message,
+        });
+
+        if (response.data.success && response.data.images && response.data.images.length > 0) {
+            const imageUrls = response.data.images.map((img) => img.url);
+            console.warn(`✅ Extracted ${imageUrls.length} images from ${url}`);
+            response.data.images.slice(0, 3).forEach((img) => {
+                console.warn(`  ${img.rank}. Score: ${img.score} - ${img.url.substring(0, 80)}...`);
+            });
+            return imageUrls;
+        } else {
+            console.warn("❌ No images found in response or request failed");
+            return [];
+        }
     } catch (error) {
-        console.error("Error extracting images:", error);
+        console.error("❌ Error extracting images:", error);
         if (isAxiosError(error)) {
-            if (error.code === "ECONNREFUSED") {
-                console.warn("Image extraction service not running on localhost:8000");
-            } else if (error.response) {
-                console.warn("Image extraction service error:", error.response.status, error.response.data);
+            if (error.response) {
+                console.warn("🚫 API error:", {
+                    status: error.response.status,
+                    data: error.response.data,
+                });
+            } else if (error.request) {
+                console.warn("🚫 No response from Hugging Face API");
+            } else {
+                console.warn("🚫 Request error:", error.message);
             }
         }
         return [];
