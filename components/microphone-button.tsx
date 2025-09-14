@@ -63,6 +63,28 @@ export function MicrophoneButton({
     },
     onError: (error) => {
       console.error("Speech recognition error:", error);
+      
+      // Filter out non-critical errors that shouldn't trigger user-visible errors
+      const errorMessage = error.message?.toLowerCase() || "";
+      const ignorableErrors = [
+        "no-speech",
+        "no speech", 
+        "silence",
+        "timeout",
+        "aborted",
+        "audio-capture"
+      ];
+      
+      const shouldIgnoreError = ignorableErrors.some(ignorable => 
+        errorMessage.includes(ignorable)
+      );
+      
+      if (shouldIgnoreError) {
+        console.log("🔇 Ignoring non-critical speech error:", error);
+        return;
+      }
+      
+      // Only call onError for actual problematic errors
       onError?.(error.message);
     },
     onStart: () => {

@@ -104,20 +104,35 @@ export function useSpeechRecognition(
       
       if (event.results && event.results.length > 0) {
         const result = event.results[0];
+        
+        // Filter out empty or very short results that are likely noise
+        const transcript = result.transcript?.trim() || "";
+        if (transcript.length < 2) {
+          console.log("🔇 Ignoring very short/empty transcript:", transcript);
+          return;
+        }
+        
+        // Filter out very low confidence results (if confidence is available)
+        const confidence = result.confidence;
+        if (confidence !== undefined && confidence < 0.3) {
+          console.log("🔇 Ignoring low confidence result:", { transcript, confidence });
+          return;
+        }
+        
         const newResult: SpeechRecognitionResult = {
-          transcript: result.transcript,
+          transcript: transcript,
           isFinal: event.isFinal,
-          confidence: result.confidence,
+          confidence: confidence,
         };
 
         if (event.isFinal) {
           // For final results, append to previous transcript
-          const newFinalTranscript = finalTranscriptRef.current + " " + result.transcript;
+          const newFinalTranscript = finalTranscriptRef.current + " " + transcript;
           finalTranscriptRef.current = newFinalTranscript.trim();
           setTranscript(finalTranscriptRef.current);
         } else {
           // For interim results, show combined final + interim
-          const currentTranscript = (finalTranscriptRef.current + " " + result.transcript).trim();
+          const currentTranscript = (finalTranscriptRef.current + " " + transcript).trim();
           setTranscript(currentTranscript);
         }
 
@@ -126,6 +141,32 @@ export function useSpeechRecognition(
     });
 
     useSpeechRecognitionEvent("error", (event: any) => {
+      // Filter out certain error types that shouldn't be treated as actual errors
+      const errorType = event.error?.toLowerCase() || "";
+      const errorMessage = event.message?.toLowerCase() || "";
+      
+      // Ignore "no speech detected" or similar scenarios
+      const ignorableErrors = [
+        "no-speech",
+        "no speech",
+        "silence",
+        "timeout",
+        "aborted",
+        "audio-capture", // Sometimes fires when there's no audio input
+      ];
+      
+      const shouldIgnoreError = ignorableErrors.some(ignorable => 
+        errorType.includes(ignorable) || errorMessage.includes(ignorable)
+      );
+      
+      if (shouldIgnoreError) {
+        console.log("🔇 Ignoring non-critical speech recognition error:", event);
+        // Just end listening gracefully without setting an error
+        setIsListening(false);
+        return;
+      }
+      
+      // Only log and set error for actual problematic errors
       console.error("❌ Speech recognition error:", event);
       setError(`${event.error}: ${event.message}`);
       setIsListening(false);

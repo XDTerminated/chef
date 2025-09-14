@@ -1,14 +1,14 @@
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Animated,
-    StyleSheet,
-    TouchableOpacity,
-    ViewStyle
+  Alert,
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle
 } from "react-native";
 
 // Import the speech recognition module
@@ -84,13 +84,12 @@ export function ContinuousSpeechInput({
         setSilenceTimer(null);
       }
       
-      // Always send interim results for real-time display
+      // Always send results to parent component
       onTranscript?.(newSegment, result.isFinal);
       
       if (result.isFinal && newSegment.trim()) {
-        // For final results, send immediately and reset
-        console.log("Final result received, sending message:", newSegment);
-        onTranscript?.(newSegment, true);
+        // For final results, reset transcript and prepare for next input
+        console.log("Final result received:", newSegment);
         setCurrentTranscript("");
         
         // Update the last sent length to include this segment
@@ -121,6 +120,35 @@ export function ContinuousSpeechInput({
     },
     onError: (error) => {
       console.error("Continuous speech error:", error);
+      
+      // Filter out non-critical errors that shouldn't trigger user-visible errors
+      const errorMessage = error.message?.toLowerCase() || "";
+      const ignorableErrors = [
+        "no-speech",
+        "no speech",
+        "silence", 
+        "timeout",
+        "aborted",
+        "audio-capture"
+      ];
+      
+      const shouldIgnoreError = ignorableErrors.some(ignorable => 
+        errorMessage.includes(ignorable)
+      );
+      
+      if (shouldIgnoreError) {
+        console.log("🔇 Ignoring non-critical speech error:", error);
+        setCurrentTranscript("");
+        
+        // Clear silence timer on any error
+        if (silenceTimer) {
+          clearTimeout(silenceTimer);
+          setSilenceTimer(null);
+        }
+        return;
+      }
+      
+      // Only call onError for actual problematic errors
       onError?.(error.message);
       setCurrentTranscript("");
       
@@ -246,11 +274,11 @@ export function ContinuousSpeechInput({
   const backgroundColor = isTTSSpeaking ? "rgba(255, 165, 0, 0.1)" : (isListening ? "rgba(255, 68, 68, 0.1)" : "rgba(0, 122, 255, 0.1)");
 
   return (
-    <ThemedView style={[styles.container, style]}>
+    <View style={[styles.container, style]}>
       {error && (
-        <ThemedText style={styles.errorText} numberOfLines={1}>
+        <Text style={styles.errorText} numberOfLines={1}>
           Error: {error}
-        </ThemedText>
+        </Text>
       )}
       
       <Animated.View
@@ -283,7 +311,7 @@ export function ContinuousSpeechInput({
           
           {/* Volume indicator when listening */}
           {isListening && volumeLevel > 0 && (
-            <ThemedView
+            <View
               style={[
                 styles.volumeIndicator,
                 {
@@ -298,18 +326,18 @@ export function ContinuousSpeechInput({
 
       {/* Show current transcript if available */}
       {currentTranscript && !isTTSSpeaking && (
-        <ThemedText style={styles.transcriptText} numberOfLines={2}>
+        <Text style={styles.transcriptText} numberOfLines={2}>
           {currentTranscript}
-        </ThemedText>
+        </Text>
       )}
       
       {/* Show TTS status */}
       {isTTSSpeaking && (
-        <ThemedText style={styles.ttsStatusText} numberOfLines={1}>
+        <Text style={styles.ttsStatusText} numberOfLines={1}>
           🔊 Speaking response...
-        </ThemedText>
+        </Text>
       )}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -317,6 +345,7 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "transparent",
   },
   buttonContainer: {
     alignItems: "center",
@@ -353,6 +382,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     opacity: 0.7,
     maxWidth: 120,
+    color: "#333",
   },
   ttsStatusText: {
     fontSize: 11,

@@ -1,13 +1,27 @@
 import { useUser } from "@clerk/clerk-expo";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import FloatingAIButton from "../../components/FloatingAIButton";
 import { IconSymbol } from "../../components/ui/icon-symbol";
 import { csvRecipeService } from "../../lib/services/csv-recipe-service";
 import { searchRecipes } from "../../lib/services/recipe-search";
 
-interface Recipe {
+// For CSV recipes with local assets
+interface CSVRecipe {
+    id: string;
+    title: string;
+    description: string;
+    ingredients: string[];
+    instructions: string[];
+    cookTime: string;
+    difficulty: string;
+    images: ImageSourcePropType[];
+    sourceUrl?: string;
+}
+
+// For search recipes with URL images
+interface SearchRecipe {
     id: string;
     title: string;
     description: string;
@@ -17,6 +31,23 @@ interface Recipe {
     difficulty: string;
     images: string[];
     sourceUrl?: string;
+}
+
+// Union type for all recipes
+type Recipe = CSVRecipe | SearchRecipe;
+
+// Helper function to check if recipe is CSVRecipe
+function isCSVRecipe(recipe: Recipe): recipe is CSVRecipe {
+    return recipe.images.length > 0 && typeof recipe.images[0] !== 'string';
+}
+
+// Helper function to get proper image source
+function getImageSource(recipe: Recipe) {
+    if (isCSVRecipe(recipe)) {
+        return recipe.images[0]; // Already ImageSourcePropType
+    } else {
+        return { uri: recipe.images[0] }; // String URL, wrap in uri object
+    }
 }
 
 export default function DiscoveryScreen() {
@@ -90,42 +121,11 @@ export default function DiscoveryScreen() {
             console.warn("🚀 Discovery: Calling searchRecipes function...");
             const results = await searchRecipes(searchQuery.trim());
             
-            // The searchRecipes function should handle getting all 10 results with HF API
-            // If we need more results, we should call searchRecipes again with different variations
+            // The searchRecipes function should handle getting 3 results with HF API
             let finalResults = results;
-            if (results.length < 10) {
-                console.warn("📈 Discovery: Got", results.length, "results, trying additional search variations...");
-                try {
-                    // Try searching with variations to get more results through the HF API
-                    const variations = [
-                        `${searchQuery.trim()} recipe`,
-                        `easy ${searchQuery.trim()}`,
-                        `${searchQuery.trim()} dish`,
-                        `homemade ${searchQuery.trim()}`
-                    ];
-                    
-                    for (const variation of variations) {
-                        if (finalResults.length >= 10) break;
-                        
-                        console.warn(`🔍 Trying search variation: "${variation}"`);
-                        const additionalResults = await searchRecipes(variation);
-                        
-                        // Filter out duplicates and add new results
-                        const newResults = additionalResults.filter(newRecipe => 
-                            !finalResults.some(existing => 
-                                existing.title.toLowerCase() === newRecipe.title.toLowerCase()
-                            )
-                        );
-                        
-                        finalResults = [...finalResults, ...newResults];
-                    }
-                } catch (variationError) {
-                    console.warn("⚠️ Discovery: Search variations failed:", variationError);
-                }
-            }
             
-            // Limit to exactly 10 results
-            finalResults = finalResults.slice(0, 10);
+            // Limit to exactly 3 results
+            finalResults = finalResults.slice(0, 3);
             
             setSearchResults(finalResults);
             console.warn("✅ Discovery: Search completed, found", finalResults.length, "recipes");
@@ -227,7 +227,7 @@ export default function DiscoveryScreen() {
                     </View>
 
                     {/* Recipe Image */}
-                    {selectedRecipe.images && selectedRecipe.images.length > 0 && <Image source={{ uri: selectedRecipe.images[0] }} style={styles.detailImage} resizeMode="cover" />}
+                    {selectedRecipe.images && selectedRecipe.images.length > 0 && <Image source={getImageSource(selectedRecipe)} style={styles.detailImage} resizeMode="cover" />}
 
                     {/* Recipe Title and Info */}
                     <View style={styles.detailContent}>
@@ -330,7 +330,7 @@ export default function DiscoveryScreen() {
                                 {searchResults.map((recipe) => (
                                     <Pressable key={recipe.id} style={styles.searchResultCard} onPress={() => setSelectedRecipe(recipe)}>
                                         {recipe.images && recipe.images.length > 0 ? (
-                                            <Image source={{ uri: recipe.images[0] }} style={styles.searchResultImage} resizeMode="cover" />
+                                            <Image source={getImageSource(recipe)} style={styles.searchResultImage} resizeMode="cover" />
                                         ) : (
                                             <View style={styles.searchResultImagePlaceholder}>
                                                 <Text style={styles.searchResultImageText}>🍳</Text>
@@ -373,7 +373,7 @@ export default function DiscoveryScreen() {
                                 {forYouRecipes.map((recipe) => (
                                     <Pressable key={recipe.id} style={styles.recipeCard} onPress={() => setSelectedRecipe(recipe)}>
                                         {recipe.images && recipe.images.length > 0 ? (
-                                            <Image source={{ uri: recipe.images[0] }} style={styles.recipeImage} resizeMode="cover" />
+                                            <Image source={getImageSource(recipe)} style={styles.recipeImage} resizeMode="cover" />
                                         ) : (
                                             <View style={styles.recipeImagePlaceholder}>
                                                 <Text style={styles.recipeImageText}>🍳</Text>

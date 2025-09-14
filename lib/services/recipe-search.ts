@@ -45,7 +45,7 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
         console.warn("📝 About to call Toolhouse, then extract images with:", "https://hackez-name-extraction.hf.space/extract");
 
         const requestPayload = {
-            message: `Find 10 different recipes for: ${query}. Please provide detailed recipes with ingredients, instructions, cooking time, and difficulty level. IMPORTANT: Please include the source URL from allrecipes.com for each recipe in the 'source' field. I need exactly 10 unique recipes.`,
+            message: `Find 3 different recipes for: ${query}. Please provide detailed recipes with their ORIGINAL NAMES (not generic numbered names), ingredients, instructions, cooking time, and difficulty level. IMPORTANT: Please include the source URL from the recipe website for each recipe in the 'source' field. Each recipe should have its proper, descriptive name as it appears on the original recipe source. I need exactly 3 unique recipes with their real names.`,
         };
 
         console.warn("📤 Sending Toolhouse request:");
@@ -125,11 +125,7 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
             // Log the full sourceUrl for debugging
             if (recipe.sourceUrl) {
                 console.warn(`🔗 Full sourceUrl for "${recipe.title}": ${recipe.sourceUrl}`);
-                if (recipe.sourceUrl.includes("allrecipes.com")) {
-                    console.warn(`✅ AllRecipes URL detected - will extract images`);
-                } else {
-                    console.warn(`⚠️ Non-AllRecipes URL - may not extract images properly`);
-                }
+                console.warn(`✅ Source URL detected - will extract images using HF API`);
             } else {
                 console.warn(`❌ No sourceUrl found for "${recipe.title}" - will use placeholders`);
             }
@@ -143,18 +139,16 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
                 console.warn(`\n🖼️ Processing images for Recipe ${index + 1}: ${recipe.title}`);
 
                 try {
-                    // Try to extract images from source URL if available and if it's an AllRecipes URL
+                    // Try to extract images from source URL if available
                     let images: string[] = [];
-                    if (recipe.sourceUrl && recipe.sourceUrl.includes("allrecipes.com")) {
-                        console.warn(`📡 AllRecipes URL found for "${recipe.title}": ${recipe.sourceUrl}`);
+                    if (recipe.sourceUrl) {
+                        console.warn(`📡 Source URL found for "${recipe.title}": ${recipe.sourceUrl}`);
                         console.warn(`🚀 Calling YOUR HF API: https://hackez-name-extraction.hf.space/extract with URL: ${recipe.sourceUrl}`);
                         images = await extractImages(recipe.sourceUrl, 3);
                         console.warn(`✅ YOUR HF API returned ${images.length} images for "${recipe.title}"`);
                         if (images.length > 0) {
                             console.warn(`📸 First image URL from YOUR API: ${images[0].substring(0, 80)}...`);
                         }
-                    } else if (recipe.sourceUrl) {
-                        console.warn(`⚠️ Non-AllRecipes URL found: ${recipe.sourceUrl} - skipping image extraction`);
                     } else {
                         console.warn(`❌ No source URL available for recipe: ${recipe.title} - skipping image extraction`);
                     }
@@ -219,20 +213,42 @@ function parseRecipesFromText(text: string, query: string): Recipe[] {
             }
 
             const lines = section.trim().split("\n");
-            let title = `${query} Recipe ${sectionIndex + 1}`;
+            let title = ""; // Start with empty title
             let description = "";
             let ingredients: string[] = [];
             let instructions: string[] = [];
             let cookTime = "30 minutes";
             let difficulty = "Medium";
 
-            console.warn("🏷️ Default title:", title);
-
             // Extract title (usually the first line or contains keywords)
-            const titleLine = lines.find((line) => line.includes("Title:") || line.includes("Recipe:") || (sectionIndex === 0 && line.length < 100 && line.length > 10));
+            const titleLine = lines.find((line) => 
+                line.includes("Title:") || 
+                line.includes("Recipe:") || 
+                line.includes("Name:") ||
+                (line.length < 100 && line.length > 10 && !line.includes("Ingredients") && !line.includes("Instructions"))
+            );
+            
             if (titleLine) {
-                title = titleLine.replace(/^(Title:|Recipe:)\s*/i, "").trim();
+                title = titleLine.replace(/^(Title:|Recipe:|Name:)\s*/i, "").trim();
                 console.warn("✅ Found title:", title);
+            } else {
+                // Try to find the first substantial line as title
+                const firstSubstantialLine = lines.find(line => 
+                    line.trim().length > 10 && 
+                    line.trim().length < 100 && 
+                    !line.toLowerCase().includes("ingredient") && 
+                    !line.toLowerCase().includes("instruction") &&
+                    !line.toLowerCase().includes("step")
+                );
+                
+                if (firstSubstantialLine) {
+                    title = firstSubstantialLine.trim();
+                    console.warn("✅ Using first substantial line as title:", title);
+                } else {
+                    // Only use generic name as last resort
+                    title = `${query} Recipe ${sectionIndex + 1}`;
+                    console.warn("⚠️ Using fallback title:", title);
+                }
             }
 
             // Extract ingredients

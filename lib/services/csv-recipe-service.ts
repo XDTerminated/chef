@@ -1,5 +1,7 @@
+import { ImageSourcePropType } from 'react-native';
 import recipesData from '../data/recipes.json';
 import { userOperations } from "../db/operations";
+import { getRecipeImage } from "../utils/recipe-images";
 
 interface CSVRecipe {
     Title: string;
@@ -17,8 +19,8 @@ interface ProcessedRecipe {
     cookTime: string;
     servings: number;
     difficulty: string;
-    image: string;
-    images: string[];
+    image: ImageSourcePropType;
+    images: ImageSourcePropType[];
     ingredients: string[];
     instructions: string[];
     nutrition: {
@@ -59,10 +61,8 @@ class CSVRecipeService {
                 const cuisine = this.detectCuisine(recipe.Title, ingredients);
                 const difficulty = this.determineDifficulty(ingredients, instructions);
                 
-                // Use the actual image from the CSV data
-                const imagePath = recipe.Image_Name ? 
-                    `../../../data/food/food/${recipe.Image_Name}.jpg` : 
-                    require('../../assets/images/chef-logo.png');
+                // Use the image utility to get the correct image asset
+                const recipeImage = getRecipeImage(recipe.Image_Name);
                 
                 return {
                     id: `csv-${index}`,
@@ -72,8 +72,8 @@ class CSVRecipeService {
                     cookTime: this.estimateCookTime(instructions.length),
                     servings: this.estimateServings(ingredients),
                     difficulty,
-                    image: imagePath,
-                    images: [imagePath],
+                    image: recipeImage,
+                    images: [recipeImage],
                     ingredients,
                     instructions,
                     nutrition: this.estimateNutrition(ingredients),

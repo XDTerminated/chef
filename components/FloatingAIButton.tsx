@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ImageSourcePropType, Pressable, StyleSheet, View } from 'react-native';
 
 interface Recipe {
   id: string;
@@ -11,7 +11,7 @@ interface Recipe {
   instructions: string[];
   cookTime: string;
   difficulty: string;
-  images: string[];
+  images: string[] | ImageSourcePropType[];
   sourceUrl?: string;
 }
 
