@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -12,13 +13,12 @@ import {
     TextInput,
     View,
 } from 'react-native';
-
-interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: Date;
-}
+import { Message, useChatHistory } from '../hooks/useChatHistory';
+import { CapturedImage, useImageCapture } from '../hooks/useImageCapture';
+import { useTextToSpeech } from '../hooks/useTextToSpeech';
+import { CerebrasAPI } from '../lib/services/cerebras-api';
+import { ClaudeAPI } from '../lib/services/claude-api';
+import { ContinuousSpeechInput } from './ContinuousSpeechInput';
 
 interface AIChatProps {
   onClose?: () => void;
@@ -31,66 +31,154 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
   
   // Always show back button when in full screen mode
   const shouldShowBackButton = showBackButton || isFullScreen;
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hi! I'm your AI cooking assistant. I can help you find recipes, suggest cooking techniques, answer cooking questions, and much more! What would you like to know?",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  
+  // Use persistent chat history hook
+  const { messages, addMessage, generateId, clearHistory } = useChatHistory();
+  
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isMentraConnected, setIsMentraConnected] = useState(false);
+  const [speechMode, setSpeechMode] = useState(false); // Toggle between typing and speech
+  const [capturedImage, setCapturedImage] = useState<CapturedImage | null>(null); // Image to be sent with message
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Image capture hook
+  const { takePhoto, selectImageFromLibrary, isLoading: isCapturingImage, isAvailable: isImageCaptureAvailable } = useImageCapture();
+
+  // Text-to-speech for AI responses when in speech mode
+  const { speak: speakText, stop: stopSpeaking, isAvailable: isTTSAvailable, isSpeaking: isTTSSpeaking } = useTextToSpeech({
+    enabled: speechMode,
+    rate: 0.85, // Slightly slower for better comprehension
+    pitch: 1.0,
+  });
+
+  // TTS availability status
+  const [ttsReady, setTtsReady] = useState(false);
+  
+  useEffect(() => {
+    setTtsReady(isTTSAvailable());
+  }, [isTTSAvailable]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
-  const generateId = () => Math.random().toString(36).substr(2, 9);
+  // Stop TTS when switching modes
+  useEffect(() => {
+    if (!speechMode) {
+      stopSpeaking();
+    }
+  }, [speechMode, stopSpeaking]);
 
-  const simulateAIResponse = (userMessage: string): string => {
-    const responses = [
-      "That's a great cooking question! Let me help you with that.",
-      "I'd be happy to suggest some recipes for you!",
-      "Here's a cooking tip that might help:",
-      "That's a common cooking challenge. Here's what I recommend:",
-      "I can definitely help you with that cooking technique!",
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)] + 
-           ` You asked about "${userMessage.toLowerCase()}". This is a placeholder response - in the real app, this would connect to an AI service like OpenAI or Claude.`;
+  const getAIResponse = async (userMessage: string, image?: CapturedImage): Promise<string> => {
+    try {
+      // If image is provided, use Claude for analysis
+      if (image) {
+        const conversationHistory = messages
+          .slice(-6) // Last 6 messages for context
+          .map(msg => ({ text: msg.text, isUser: msg.isUser }));
+        
+        const claudeInstance = ClaudeAPI.getInstance();
+        const response = await claudeInstance.analyzeImageWithText(
+          image.base64,
+          image.type,
+          userMessage,
+          conversationHistory
+        );
+        return response;
+      } else {
+        // Use Cerebras for text-only responses
+        const conversationHistory = CerebrasAPI.convertChatHistory(
+          messages.map(msg => ({ text: msg.text, isUser: msg.isUser }))
+        );
+        
+        const cerebrasInstance = CerebrasAPI.getInstance();
+        const response = await cerebrasInstance.getCookingResponse(userMessage, conversationHistory);
+        return response;
+      }
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      return "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment!";
+    }
   };
 
-  const handleSendMessage = async () => {
-    if (!inputText.trim()) return;
+  const handleSendMessage = async (messageText?: string, voiceMessage: boolean = false) => {
+    const textToSend = messageText || inputText.trim();
+    const imageToSend = capturedImage;
+    
+    // Must have either text or image
+    if (!textToSend && !imageToSend) return;
 
     const userMessage: Message = {
       id: generateId(),
-      text: inputText.trim(),
+      text: textToSend || (imageToSend ? "What can you tell me about this image?" : ""),
       isUser: true,
       timestamp: new Date(),
+      imageUri: imageToSend?.uri,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    addMessage(userMessage);
     setInputText('');
+    setCapturedImage(null); // Clear the captured image
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    // Get AI response
+    try {
+      const aiResponseText = await getAIResponse(userMessage.text, imageToSend || undefined);
       const aiResponse: Message = {
         id: generateId(),
-        text: simulateAIResponse(userMessage.text),
+        text: aiResponseText,
         isUser: false,
         timestamp: new Date(),
       };
       
-      setMessages(prev => [...prev, aiResponse]);
+      addMessage(aiResponse);
       setIsTyping(false);
-    }, 1500);
+      
+      // Speak the response if in speech mode and TTS is available
+      if (speechMode && ttsReady) {
+        console.log('🔊 Speaking AI response in speech mode');
+        // Add small delay to ensure speech recognition has fully stopped
+        setTimeout(() => {
+          speakText(aiResponseText);
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      const errorResponse: Message = {
+        id: generateId(),
+        text: "I'm sorry, I encountered an error while processing your request. Please try again!",
+        isUser: false,
+        timestamp: new Date(),
+      };
+      addMessage(errorResponse);
+      setIsTyping(false);
+      
+      // Speak error message if in speech mode and TTS is available
+      if (speechMode && ttsReady) {
+        setTimeout(() => {
+          speakText(errorResponse.text);
+        }, 500);
+      }
+    }
+  };
+
+  const handleSendButtonPress = () => {
+    handleSendMessage();
+  };
+
+  const handleSpeechTranscript = (transcript: string, isFinal: boolean) => {
+    // Stop any ongoing TTS when user starts speaking
+    if (transcript.trim()) {
+      stopSpeaking();
+    }
+    
+    if (isFinal && transcript.trim()) {
+      // Send the final transcript as a message
+      handleSendMessage(transcript.trim());
+    }
   };
 
   const handleVoiceInput = () => {
@@ -138,6 +226,36 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
     }
   };
 
+  const handleCameraPress = () => {
+    Alert.alert(
+      'Add Photo',
+      'Choose how you\'d like to add a photo:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Take Photo', onPress: handleTakePhoto },
+        { text: 'Choose from Library', onPress: handleSelectFromLibrary },
+      ]
+    );
+  };
+
+  const handleTakePhoto = async () => {
+    const image = await takePhoto();
+    if (image) {
+      setCapturedImage(image);
+    }
+  };
+
+  const handleSelectFromLibrary = async () => {
+    const image = await selectImageFromLibrary();
+    if (image) {
+      setCapturedImage(image);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setCapturedImage(null);
+  };
+
   const renderMessage = (message: Message) => (
     <View
       key={message.id}
@@ -152,14 +270,27 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
           message.isUser ? styles.userBubble : styles.aiBubble,
         ]}
       >
-        <Text
-          style={[
-            styles.messageText,
-            message.isUser ? styles.userText : styles.aiText,
-          ]}
-        >
-          {message.text}
-        </Text>
+        {/* Display image if present */}
+        {message.imageUri && (
+          <Image
+            source={{ uri: message.imageUri }}
+            style={styles.messageImage}
+            resizeMode="cover"
+          />
+        )}
+        
+        {/* Display text */}
+        {message.text && (
+          <Text
+            style={[
+              styles.messageText,
+              message.isUser ? styles.userText : styles.aiText,
+              message.imageUri && styles.messageTextWithImage,
+            ]}
+          >
+            {message.text}
+          </Text>
+        )}
         <Text style={styles.timestamp}>
           {message.timestamp.toLocaleTimeString([], { 
             hour: '2-digit', 
@@ -184,11 +315,28 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
             </View>
             <Text style={styles.headerTitle}>AI Cooking Assistant</Text>
           </View>
-          {onClose && !shouldShowBackButton ? (
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#666" />
+          <View style={styles.headerButtons}>
+            <Pressable 
+              onPress={() => {
+                Alert.alert(
+                  "Clear Chat History",
+                  "Are you sure you want to clear all messages?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Clear", style: "destructive", onPress: clearHistory }
+                  ]
+                );
+              }} 
+              style={styles.headerButton}
+            >
+              <Ionicons name="trash-outline" size={20} color="#666" />
             </Pressable>
-          ) : null}
+            {onClose && !shouldShowBackButton ? (
+              <Pressable onPress={onClose} style={styles.headerButton}>
+                <Ionicons name="close" size={24} color="#666" />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         
         {/* Back Button - Moved to bottom section */}
@@ -256,43 +404,146 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
 
       {/* Input Area */}
       <View style={styles.inputContainer}>
+        {/* Input Mode Toggle */}
+        <View style={styles.inputModeContainer}>
+          <Pressable
+            style={[
+              styles.modeButton,
+              !speechMode && styles.modeButtonActive,
+            ]}
+            onPress={() => setSpeechMode(false)}
+          >
+            <Ionicons
+              name="create-outline"
+              size={16}
+              color={!speechMode ? "#fff" : "#666"}
+            />
+            <Text style={[
+              styles.modeButtonText,
+              !speechMode && styles.modeButtonTextActive,
+            ]}>
+              Type
+            </Text>
+          </Pressable>
+          
+          <Pressable
+            style={[
+              styles.modeButton,
+              speechMode && styles.modeButtonActive,
+            ]}
+            onPress={() => setSpeechMode(true)}
+          >
+            <Ionicons
+              name="mic-outline"
+              size={16}
+              color={speechMode ? "#fff" : "#666"}
+            />
+            <Text style={[
+              styles.modeButtonText,
+              speechMode && styles.modeButtonTextActive,
+            ]}>
+              Speak
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Image Preview */}
+        {capturedImage && (
+          <View style={styles.imagePreviewContainer}>
+            <Image
+              source={{ uri: capturedImage.uri }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+            />
+            <Pressable
+              style={styles.removeImageButton}
+              onPress={handleRemoveImage}
+            >
+              <Ionicons name="close-circle" size={24} color="#FF4444" />
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.inputRow}>
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Ask me anything about cooking..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={500}
-          />
-          <Pressable
-            style={[
-              styles.voiceButton,
-              isRecording && styles.voiceButtonActive,
-            ]}
-            onPress={handleVoiceInput}
-          >
-            <Ionicons
-              name={isRecording ? "stop" : "mic"}
-              size={20}
-              color={isRecording ? "#fff" : "#FF8C00"}
-            />
-          </Pressable>
-          <Pressable
-            style={[
-              styles.sendButton,
-              !inputText.trim() && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSendMessage}
-            disabled={!inputText.trim()}
-          >
-            <Ionicons
-              name="send"
-              size={20}
-              color={inputText.trim() ? "#fff" : "#999"}
-            />
-          </Pressable>
+          {!speechMode ? (
+            <>
+              {/* Camera Button */}
+              <Pressable
+                style={[
+                  styles.cameraButton,
+                  !isImageCaptureAvailable && styles.cameraButtonDisabled
+                ]}
+                onPress={handleCameraPress}
+                disabled={isCapturingImage || !isImageCaptureAvailable}
+              >
+                <Ionicons
+                  name={isCapturingImage ? "camera" : "camera-outline"}
+                  size={24}
+                  color={!isImageCaptureAvailable ? "#ccc" : (isCapturingImage ? "#999" : "#FF8C00")}
+                />
+              </Pressable>
+              
+              <TextInput
+                style={styles.textInput}
+                value={inputText}
+                onChangeText={setInputText}
+                placeholder="Ask me anything about cooking..."
+                placeholderTextColor="#999"
+                multiline
+                maxLength={500}
+              />
+              <Pressable
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() && !capturedImage) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSendButtonPress}
+                disabled={!inputText.trim() && !capturedImage}
+              >
+                <Ionicons
+                  name="send"
+                  size={20}
+                  color={(inputText.trim() || capturedImage) ? "#fff" : "#999"}
+                />
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.speechInputContainer}>
+              {/* Camera Button for Speech Mode */}
+              <View style={styles.speechTopRow}>
+                <Text style={styles.speechInstructionText}>
+                  {ttsReady 
+                    ? "Speak naturally - responses will be spoken back to you"
+                    : "Speak naturally - rebuild required for voice responses"
+                  }
+                </Text>
+                <Pressable
+                  style={[
+                    styles.cameraButtonSpeech,
+                    !isImageCaptureAvailable && styles.cameraButtonDisabled
+                  ]}
+                  onPress={handleCameraPress}
+                  disabled={isCapturingImage || !isImageCaptureAvailable}
+                >
+                  <Ionicons
+                    name={isCapturingImage ? "camera" : "camera-outline"}
+                    size={20}
+                    color={!isImageCaptureAvailable ? "#ccc" : (isCapturingImage ? "#999" : "#FF8C00")}
+                  />
+                </Pressable>
+              </View>
+              <ContinuousSpeechInput
+                onTranscript={handleSpeechTranscript}
+                onError={(error) => {
+                  console.error("Speech input error:", error);
+                  Alert.alert("Speech Error", error);
+                }}
+                size={56}
+                lang="en-US"
+                isTTSSpeaking={isTTSSpeaking}
+              />
+            </View>
+          )}
         </View>
         {isRecording && (
           <View style={styles.recordingIndicator}>
@@ -383,6 +634,14 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerButton: {
+    padding: 4,
+  },
   mentraButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -464,6 +723,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
+  messageTextWithImage: {
+    marginTop: 8,
+  },
+  messageImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
   userText: {
     color: '#fff',
   },
@@ -492,9 +760,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  inputModeContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    padding: 2,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+  },
+  modeButtonActive: {
+    backgroundColor: '#FF8C00',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    marginLeft: 4,
+    color: '#666',
+    fontWeight: '500',
+  },
+  modeButtonTextActive: {
+    color: '#fff',
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+  },
+  cameraButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff5e6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  cameraButtonDisabled: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.5,
+  },
+  speechInputContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  speechTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 12,
+  },
+  speechInstructionText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    flex: 1,
+  },
+  cameraButtonSpeech: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fff5e6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   textInput: {
     flex: 1,
