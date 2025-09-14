@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "chef",
-    "slug": "chef",
+    "name": "Heaven's Kitchen",
+    "slug": "heavens-kitchen",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "chef",
+    "scheme": "heavens-kitchen",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.noahwolk.chef",
+      "bundleIdentifier": "com.noahwolk.heavenskitchen",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition for hands-free cooking assistance.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone for voice commands.",
@@ -34,7 +34,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "package": "com.noahwolk.chef"
+      "package": "com.noahwolk.heavenskitchen"
     },
     "web": {
       "output": "static",

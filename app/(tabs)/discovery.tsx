@@ -2,8 +2,9 @@ import { useUser } from "@clerk/clerk-expo";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import FloatingAIButton from "../../components/FloatingAIButton";
 import { IconSymbol } from "../../components/ui/icon-symbol";
-import { kaggleRecipeService } from "../../lib/services/kaggle-recipes";
+import { csvRecipeService } from "../../lib/services/csv-recipe-service";
 import { searchRecipes } from "../../lib/services/recipe-search";
 
 interface Recipe {
@@ -29,6 +30,7 @@ export default function DiscoveryScreen() {
     const [hasSearched, setHasSearched] = useState(false);
     const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
     const [hasMoreRecipes, setHasMoreRecipes] = useState(true);
+    const [searchProgress, setSearchProgress] = useState(0);
 
     // Load personalized recipes on component mount
     useEffect(() => {
@@ -38,7 +40,7 @@ export default function DiscoveryScreen() {
             try {
                 setIsLoadingForYou(true);
                 console.log("🎯 Loading personalized recipes for user:", user.id);
-                const personalizedRecipes = await kaggleRecipeService.getForYouRecipes(user.id, 4);
+                const personalizedRecipes = await csvRecipeService.getForYouRecipes(user.id, 4);
                 setForYouRecipes(
                     personalizedRecipes.map((recipe: any) => ({
                         ...recipe,
@@ -59,6 +61,24 @@ export default function DiscoveryScreen() {
         loadForYouRecipes();
     }, [user?.id]);
 
+    // Animate search progress bar
+    useEffect(() => {
+        if (isSearching) {
+            setSearchProgress(0);
+            const interval = setInterval(() => {
+                setSearchProgress((prev) => {
+                    if (prev >= 90) return prev; // Stop at 90% until search completes
+                    return prev + Math.random() * 15; // Random increment
+                });
+            }, 200);
+            
+            return () => clearInterval(interval);
+        } else {
+            setSearchProgress(100); // Complete when search is done
+            setTimeout(() => setSearchProgress(0), 500); // Reset after a delay
+        }
+    }, [isSearching]);
+
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
 
@@ -69,8 +89,46 @@ export default function DiscoveryScreen() {
         try {
             console.warn("🚀 Discovery: Calling searchRecipes function...");
             const results = await searchRecipes(searchQuery.trim());
-            setSearchResults(results);
-            console.warn("✅ Discovery: Search completed, found", results.length, "recipes");
+            
+            // The searchRecipes function should handle getting all 10 results with HF API
+            // If we need more results, we should call searchRecipes again with different variations
+            let finalResults = results;
+            if (results.length < 10) {
+                console.warn("📈 Discovery: Got", results.length, "results, trying additional search variations...");
+                try {
+                    // Try searching with variations to get more results through the HF API
+                    const variations = [
+                        `${searchQuery.trim()} recipe`,
+                        `easy ${searchQuery.trim()}`,
+                        `${searchQuery.trim()} dish`,
+                        `homemade ${searchQuery.trim()}`
+                    ];
+                    
+                    for (const variation of variations) {
+                        if (finalResults.length >= 10) break;
+                        
+                        console.warn(`🔍 Trying search variation: "${variation}"`);
+                        const additionalResults = await searchRecipes(variation);
+                        
+                        // Filter out duplicates and add new results
+                        const newResults = additionalResults.filter(newRecipe => 
+                            !finalResults.some(existing => 
+                                existing.title.toLowerCase() === newRecipe.title.toLowerCase()
+                            )
+                        );
+                        
+                        finalResults = [...finalResults, ...newResults];
+                    }
+                } catch (variationError) {
+                    console.warn("⚠️ Discovery: Search variations failed:", variationError);
+                }
+            }
+            
+            // Limit to exactly 10 results
+            finalResults = finalResults.slice(0, 10);
+            
+            setSearchResults(finalResults);
+            console.warn("✅ Discovery: Search completed, found", finalResults.length, "recipes");
         } catch (error) {
             console.error("❌ Discovery: Search failed:", error);
             setSearchResults([]);
@@ -102,7 +160,7 @@ export default function DiscoveryScreen() {
             console.log("📚 Loading more recipes... Currently have:", forYouRecipes.length);
 
             // Load 4 more recipes starting from current count (offset)
-            const moreRecipes = await kaggleRecipeService.getForYouRecipes(user.id, 4, forYouRecipes.length);
+            const moreRecipes = await csvRecipeService.getForYouRecipes(user.id, 4, forYouRecipes.length);
             console.log("📥 Received more recipes:", moreRecipes.length);
 
             if (moreRecipes.length > 0) {
@@ -207,6 +265,7 @@ export default function DiscoveryScreen() {
                         </View>
                     </View>
                 </ScrollView>
+                <FloatingAIButton recipe={selectedRecipe} />
             </SafeAreaView>
         );
     }
@@ -237,12 +296,33 @@ export default function DiscoveryScreen() {
                             <View style={styles.filterTag}>
                                 <Text style={styles.filterTagText}>Searching: &ldquo;{searchQuery}&rdquo;</Text>
                             </View>
+                            <Pressable 
+                                style={styles.clearSearchButton} 
+                                onPress={() => {
+                                    setSearchQuery("");
+                                    setHasSearched(false);
+                                    setSearchResults([]);
+                                }}
+                            >
+                                <Text style={styles.clearSearchText}>Clear</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                )}
+
+                {/* Search Loading */}
+                {isSearching && (
+                    <View style={styles.searchLoadingContainer}>
+                        <ActivityIndicator size="large" color="#FF8C00" />
+                        <Text style={styles.searchLoadingText}>Finding delicious recipes...</Text>
+                        <View style={styles.progressBarContainer}>
+                            <View style={[styles.progressBar, { width: `${searchProgress}%` }]} />
                         </View>
                     </View>
                 )}
 
                 {/* Search Results */}
-                {hasSearched && (
+                {hasSearched && !isSearching && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>{searchResults.length > 0 ? `Search Results (${searchResults.length})` : "No recipes found"}</Text>
                         {searchResults.length > 0 && (
@@ -280,7 +360,7 @@ export default function DiscoveryScreen() {
                 )}
 
                 {/* For You - Personalized recommendations based on user preferences */}
-                {(!hasSearched || searchResults.length === 0) && (
+                {!hasSearched && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>For You</Text>
                         {isLoadingForYou ? (
@@ -735,5 +815,45 @@ const styles = StyleSheet.create({
     },
     recipeContent: {
         gap: 4,
+    },
+    // Search loading styles
+    searchLoadingContainer: {
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 60,
+        gap: 16,
+    },
+    searchLoadingText: {
+        fontSize: 18,
+        color: "#666",
+        textAlign: "center",
+        fontWeight: "500",
+    },
+    progressBarContainer: {
+        width: "80%",
+        height: 4,
+        backgroundColor: "#f0f0f0",
+        borderRadius: 2,
+        overflow: "hidden",
+        marginTop: 8,
+    },
+    progressBar: {
+        height: "100%",
+        backgroundColor: "#FF8C00",
+        borderRadius: 2,
+    },
+    // Clear search styles
+    clearSearchButton: {
+        backgroundColor: "#f0f0f0",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginLeft: 8,
+    },
+    clearSearchText: {
+        fontSize: 12,
+        color: "#666",
+        fontWeight: "500",
     },
 });

@@ -3,7 +3,6 @@ import { Tabs, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 
-import FloatingAIButton from "@/components/FloatingAIButton";
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
@@ -66,7 +65,6 @@ export default function TabLayout() {
                     }}
                 />
             </Tabs>
-            <FloatingAIButton />
         </View>
     );
 }

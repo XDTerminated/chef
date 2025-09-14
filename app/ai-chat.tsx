@@ -1,10 +1,31 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { StatusBar, StyleSheet, View } from 'react-native';
 import AIChat from '../components/AIChat';
 
+interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string[];
+  cookTime: string;
+  difficulty: string;
+}
+
 export default function AIChatScreen() {
   const router = useRouter();
+  const { recipeContext } = useLocalSearchParams();
+
+  // Parse recipe context if provided
+  let recipe: Recipe | undefined;
+  if (recipeContext && typeof recipeContext === 'string') {
+    try {
+      recipe = JSON.parse(recipeContext);
+    } catch (error) {
+      console.warn('Failed to parse recipe context:', error);
+    }
+  }
 
   const handleClose = () => {
     console.log('Back button pressed - navigating back to main app');
@@ -15,7 +36,12 @@ export default function AIChatScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <AIChat onClose={handleClose} isFullScreen={true} showBackButton={true} />
+      <AIChat 
+        onClose={handleClose} 
+        isFullScreen={true} 
+        showBackButton={true} 
+        recipeContext={recipe}
+      />
     </View>
   );
 }

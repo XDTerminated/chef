@@ -3,11 +3,46 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-export default function FloatingAIButton() {
+interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string[];
+  cookTime: string;
+  difficulty: string;
+  images: string[];
+  sourceUrl?: string;
+}
+
+interface FloatingAIButtonProps {
+  recipe?: Recipe;
+}
+
+export default function FloatingAIButton({ recipe }: FloatingAIButtonProps) {
   const router = useRouter();
 
   const handlePress = () => {
-    router.push('/ai-chat');
+    if (recipe) {
+      // Navigate with recipe context
+      router.push({
+        pathname: '/ai-chat',
+        params: {
+          recipeContext: JSON.stringify({
+            id: recipe.id,
+            title: recipe.title,
+            description: recipe.description,
+            ingredients: recipe.ingredients,
+            instructions: recipe.instructions,
+            cookTime: recipe.cookTime,
+            difficulty: recipe.difficulty,
+          })
+        }
+      });
+    } else {
+      // Navigate without context (fallback)
+      router.push('/ai-chat');
+    }
   };
 
   return (

@@ -45,7 +45,7 @@ async function searchRecipes(query: string): Promise<Recipe[]> {
         console.warn("📝 About to call Toolhouse, then extract images with:", "https://hackez-name-extraction.hf.space/extract");
 
         const requestPayload = {
-            message: `Find recipes for: ${query}. Please provide detailed recipes with ingredients, instructions, cooking time, and difficulty level. IMPORTANT: Please include the source URL from allrecipes.com for each recipe in the 'source' field.`,
+            message: `Find 10 different recipes for: ${query}. Please provide detailed recipes with ingredients, instructions, cooking time, and difficulty level. IMPORTANT: Please include the source URL from allrecipes.com for each recipe in the 'source' field. I need exactly 10 unique recipes.`,
         };
 
         console.warn("📤 Sending Toolhouse request:");

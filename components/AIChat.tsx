@@ -1,17 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { Message, useChatHistory } from '../hooks/useChatHistory';
 import { CapturedImage, useImageCapture } from '../hooks/useImageCapture';
@@ -20,14 +20,25 @@ import { CerebrasAPI } from '../lib/services/cerebras-api';
 import { ClaudeAPI } from '../lib/services/claude-api';
 import { ContinuousSpeechInput } from './ContinuousSpeechInput';
 
+interface Recipe {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: string[];
+  instructions: string[];
+  cookTime: string;
+  difficulty: string;
+}
+
 interface AIChatProps {
   onClose?: () => void;
   isFullScreen?: boolean;
   showBackButton?: boolean;
+  recipeContext?: Recipe;
 }
 
-export default function AIChat({ onClose, isFullScreen = false, showBackButton = false }: AIChatProps) {
-  console.log('AIChat props:', { onClose: !!onClose, isFullScreen, showBackButton });
+export default function AIChat({ onClose, isFullScreen = false, showBackButton = false, recipeContext }: AIChatProps) {
+  console.log('AIChat props:', { onClose: !!onClose, isFullScreen, showBackButton, recipeContext: !!recipeContext });
   
   // Always show back button when in full screen mode
   const shouldShowBackButton = showBackButton || isFullScreen;
@@ -72,13 +83,51 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
     }
   }, [speechMode, stopSpeaking]);
 
+  // Initialize chat with recipe context if provided
+  useEffect(() => {
+    if (recipeContext && messages.length === 0) {
+      // Add initial system message with recipe context
+      const welcomeMessage = `Hi! I see you're working on **${recipeContext.title}**. I'm here to help you with this recipe! 
+
+**Recipe Details:**
+- ⏱️ Cook Time: ${recipeContext.cookTime}
+- 📊 Difficulty: ${recipeContext.difficulty}
+- 📝 Description: ${recipeContext.description}
+
+I can help you with:
+- Step-by-step cooking guidance
+- Ingredient substitutions
+- Cooking techniques and tips
+- Timing and preparation advice
+- Troubleshooting any issues
+
+What would you like to know about making this dish?`;
+
+      addMessage({
+        id: generateId(),
+        text: welcomeMessage,
+        isUser: false,
+        timestamp: new Date(),
+      });
+    }
+  }, [recipeContext, messages.length, addMessage, generateId]);
+
   const getAIResponse = async (userMessage: string, image?: CapturedImage): Promise<string> => {
     try {
       // If image is provided, use Claude for analysis
       if (image) {
-        const conversationHistory = messages
+        let conversationHistory = messages
           .slice(-6) // Last 6 messages for context
           .map(msg => ({ text: msg.text, isUser: msg.isUser }));
+        
+        // Add recipe context to the conversation if available
+        if (recipeContext) {
+          const recipeContextMessage = {
+            text: `I'm helping with the recipe: ${recipeContext.title}. Ingredients: ${recipeContext.ingredients.join(', ')}. Instructions: ${recipeContext.instructions.join(' ')}`,
+            isUser: false
+          };
+          conversationHistory = [recipeContextMessage, ...conversationHistory];
+        }
         
         const claudeInstance = ClaudeAPI.getInstance();
         const response = await claudeInstance.analyzeImageWithText(
@@ -90,12 +139,20 @@ export default function AIChat({ onClose, isFullScreen = false, showBackButton =
         return response;
       } else {
         // Use Cerebras for text-only responses
-        const conversationHistory = CerebrasAPI.convertChatHistory(
-          messages.map(msg => ({ text: msg.text, isUser: msg.isUser }))
-        );
+        let conversationHistory = messages.map(msg => ({ text: msg.text, isUser: msg.isUser }));
         
+        // Add recipe context to the conversation if available
+        if (recipeContext) {
+          const recipeContextMessage = {
+            text: `Current recipe context: "${recipeContext.title}" - ${recipeContext.description}. Ingredients: ${recipeContext.ingredients.join(', ')}. Cook time: ${recipeContext.cookTime}. Difficulty: ${recipeContext.difficulty}. Instructions: ${recipeContext.instructions.join(' ')}`,
+            isUser: false
+          };
+          conversationHistory = [recipeContextMessage, ...conversationHistory];
+        }
+        
+        const convertedHistory = CerebrasAPI.convertChatHistory(conversationHistory);
         const cerebrasInstance = CerebrasAPI.getInstance();
-        const response = await cerebrasInstance.getCookingResponse(userMessage, conversationHistory);
+        const response = await cerebrasInstance.getCookingResponse(userMessage, convertedHistory);
         return response;
       }
     } catch (error) {

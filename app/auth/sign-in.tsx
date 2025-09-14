@@ -5,8 +5,8 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Dimensions, ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
 
 import BlurText from "../../components/BlurText";
-import ChefLogo from "../../components/ChefLogo";
 import GradientText from "../../components/GradientText";
+import HeavensKitchenLogo from "../../components/HeavensKitchenLogo";
 import { useWarmUpBrowser } from "../../hooks/useWarmUpBrowser";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -81,13 +81,13 @@ export default function SignInScreen() {
                         >
                             13k+ premium recipes
                         </GradientText>
-                        <Text style={styles.title}>Chef</Text>
+                        <Text style={styles.title}>Heaven's Kitchen</Text>
                     </View>
 
                     {/* Logo Section */}
                     <View style={styles.logoSection}>
                         <View style={styles.logoContainer}>
-                            <ChefLogo width={80} height={80} color="#FFFFFF" />
+                            <HeavensKitchenLogo width={80} height={80} />
                         </View>
                     </View>
 
