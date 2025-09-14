@@ -1,9 +1,12 @@
 import { useAuthContext } from "@/lib/auth/AuthProvider";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback } from "react";
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function ProfileScreen() {
-    const { user, isLoading, signOut } = useAuthContext();
+    const { user, dbUser, isLoading, signOut, refreshUser } = useAuthContext();
+    const router = useRouter();
 
     const handleSignOut = () => {
         Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -15,6 +18,17 @@ export default function ProfileScreen() {
             },
         ]);
     };
+
+    const handleEditProfile = () => {
+        router.push("/preferences");
+    };
+
+    // Refresh user data when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            refreshUser();
+        }, [refreshUser])
+    );
 
     if (isLoading) {
         return (
@@ -44,9 +58,7 @@ export default function ProfileScreen() {
                 <View style={styles.profileSection}>
                     {user.imageUrl && <Image source={{ uri: user.imageUrl }} style={styles.avatar} />}
                     <View style={styles.userInfo}>
-                        <Text style={styles.name}>
-                            {user.name || "Anonymous User"}
-                        </Text>
+                        <Text style={styles.name}>{user.name || "Anonymous User"}</Text>
                         <Text style={styles.email}>{user.email}</Text>
                         <Text style={styles.joinDate}>Member since {new Date(user.createdAt!).toLocaleDateString()}</Text>
                     </View>
@@ -77,11 +89,11 @@ export default function ProfileScreen() {
                     <View style={styles.preferencesGrid}>
                         <View style={styles.preferenceItem}>
                             <Text style={styles.preferenceLabel}>Dietary</Text>
-                            <Text style={styles.preferenceValue}>Vegetarian, Gluten-Free</Text>
+                            <Text style={styles.preferenceValue}>{dbUser?.dietaryRestrictions && dbUser.dietaryRestrictions.length > 0 ? dbUser.dietaryRestrictions.join(", ") : "Not set"}</Text>
                         </View>
                         <View style={styles.preferenceItem}>
                             <Text style={styles.preferenceLabel}>Cuisines</Text>
-                            <Text style={styles.preferenceValue}>Italian, Indian, Mediterranean</Text>
+                            <Text style={styles.preferenceValue}>{dbUser?.preferences && dbUser.preferences.length > 0 ? dbUser.preferences.join(", ") : "Not set"}</Text>
                         </View>
                     </View>
                 </View>
@@ -89,7 +101,7 @@ export default function ProfileScreen() {
                 {/* Settings Section */}
                 <View style={styles.settingsSection}>
                     <Text style={styles.sectionTitle}>Settings</Text>
-                    <Pressable style={styles.settingItem}>
+                    <Pressable style={styles.settingItem} onPress={handleEditProfile}>
                         <Text style={styles.settingText}>Edit Profile</Text>
                         <Text style={styles.settingArrow}>›</Text>
                     </Pressable>
@@ -121,7 +133,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: "#fff",
     },
     content: {
         flex: 1,
@@ -133,26 +145,26 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 32,
-        fontWeight: '800',
-        color: '#333',
-        textAlign: 'center',
+        fontWeight: "800",
+        color: "#333",
+        textAlign: "center",
     },
     loadingText: {
         fontSize: 16,
-        color: '#666',
-        textAlign: 'center',
+        color: "#666",
+        textAlign: "center",
         marginTop: 50,
     },
     errorText: {
         fontSize: 16,
-        color: '#ff4444',
-        textAlign: 'center',
+        color: "#ff4444",
+        textAlign: "center",
         marginTop: 50,
     },
     profileSection: {
-        alignItems: 'center',
+        alignItems: "center",
         marginBottom: 30,
-        backgroundColor: '#f9f9f9',
+        backgroundColor: "#f9f9f9",
         borderRadius: 16,
         padding: 20,
     },
@@ -163,52 +175,52 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     userInfo: {
-        alignItems: 'center',
+        alignItems: "center",
     },
     name: {
         fontSize: 20,
-        fontWeight: '700',
-        color: '#333',
+        fontWeight: "700",
+        color: "#333",
         marginBottom: 4,
     },
     email: {
         fontSize: 14,
-        color: '#666',
+        color: "#666",
         marginBottom: 4,
     },
     joinDate: {
         fontSize: 12,
-        color: '#999',
+        color: "#999",
     },
     statsSection: {
         marginBottom: 30,
     },
     sectionTitle: {
         fontSize: 20,
-        fontWeight: '700',
-        color: '#333',
+        fontWeight: "700",
+        color: "#333",
         marginBottom: 16,
     },
     statsGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        backgroundColor: '#f9f9f9',
+        flexDirection: "row",
+        justifyContent: "space-around",
+        backgroundColor: "#f9f9f9",
         borderRadius: 12,
         padding: 20,
     },
     statItem: {
-        alignItems: 'center',
+        alignItems: "center",
     },
     statNumber: {
         fontSize: 24,
-        fontWeight: '800',
-        color: '#FF8C00',
+        fontWeight: "800",
+        color: "#FF8C00",
         marginBottom: 4,
     },
     statLabel: {
         fontSize: 12,
-        color: '#666',
-        fontWeight: '500',
+        color: "#666",
+        fontWeight: "500",
     },
     preferencesSection: {
         marginBottom: 30,
@@ -217,53 +229,53 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     preferenceItem: {
-        backgroundColor: '#f9f9f9',
+        backgroundColor: "#f9f9f9",
         borderRadius: 12,
         padding: 16,
     },
     preferenceLabel: {
         fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
+        fontWeight: "600",
+        color: "#333",
         marginBottom: 4,
     },
     preferenceValue: {
         fontSize: 14,
-        color: '#666',
+        color: "#666",
     },
     settingsSection: {
         marginBottom: 30,
     },
     settingItem: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: '#f9f9f9',
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#f9f9f9",
         borderRadius: 12,
         padding: 16,
         marginBottom: 8,
     },
     settingText: {
         fontSize: 16,
-        color: '#333',
-        fontWeight: '500',
+        color: "#333",
+        fontWeight: "500",
     },
     settingArrow: {
         fontSize: 20,
-        color: '#999',
+        color: "#999",
     },
     actionsSection: {
         marginBottom: 40,
     },
     signOutButton: {
-        backgroundColor: '#ff4444',
+        backgroundColor: "#ff4444",
         padding: 16,
         borderRadius: 12,
-        alignItems: 'center',
+        alignItems: "center",
     },
     signOutButtonText: {
-        color: '#fff',
+        color: "#fff",
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: "600",
     },
 });
