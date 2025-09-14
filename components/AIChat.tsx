@@ -17,7 +17,7 @@ import { Message, useChatHistory } from '../hooks/useChatHistory';
 import { CapturedImage, useImageCapture } from '../hooks/useImageCapture';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { CerebrasAPI } from '../lib/services/cerebras-api';
-import { ClaudeAPI } from '../lib/services/claude-api';
+import { GeminiAPI } from '../lib/services/gemini-api';
 import { ContinuousSpeechInput } from './ContinuousSpeechInput';
 
 interface Recipe {
@@ -129,8 +129,8 @@ What would you like to know about making this dish?`;
           conversationHistory = [recipeContextMessage, ...conversationHistory];
         }
         
-        const claudeInstance = ClaudeAPI.getInstance();
-        const response = await claudeInstance.analyzeImageWithText(
+        const geminiInstance = GeminiAPI.getInstance();
+        const response = await geminiInstance.analyzeImageWithText(
           image.base64,
           image.type,
           userMessage,
