@@ -1,14 +1,25 @@
-import { pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { json, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
-// Users table with Clerk integration
+// Users table with all the fields from your database
 export const users = pgTable("users", {
     id: serial("id").primaryKey(),
+    email: text("email").unique().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    firstName: varchar("first_name", { length: 100 }),
+    lastName: varchar("last_name", { length: 100 }),
+    preferences: json("preferences").$type<string[]>().default([]),
+    dietaryRestrictions: json("dietary_restrictions").$type<string[]>().default([]),
     clerkId: varchar("clerk_id", { length: 256 }).unique().notNull(),
-    name: varchar("name", { length: 256 }),
-    email: varchar("email", { length: 256 }).unique(),
     imageUrl: varchar("image_url", { length: 512 }),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    ingredients: json("ingredients").$type<string[]>().default([]),
+    customIngredients: json("custom_ingredients").$type<string[]>().default([]),
+    customCuisines: json("custom_cuisines").$type<string[]>().default([]),
+    customDietary: json("custom_dietary").$type<string[]>().default([]),
+    skillLevel: varchar("skill_level", { length: 50 }),
+    timePreference: varchar("time_preference", { length: 50 }),
+    mealTypes: json("meal_types").$type<string[]>().default([]),
+    flavorProfiles: json("flavor_profiles").$type<string[]>().default([]),
 });
 
 // Example Recipes table (since this appears to be a chef app)

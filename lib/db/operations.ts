@@ -1,126 +1,152 @@
-import { type NewRecipe, type NewUser, type Recipe, type User } from "./schema";
+// Database operations using Drizzle with Neon serverless (React Native compatible)
+import { neon } from "@neondatabase/serverless";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-http";
+import { users, type User } from "./schema";
 
-// Mock data storage for React Native compatibility
-// In production, these would be HTTP requests to your backend API
-let mockUsers: User[] = [];
-let mockRecipes: Recipe[] = [];
-let userIdCounter = 1;
-let recipeIdCounter = 1;
+// Initialize Neon HTTP client (works in React Native)
+const sql = neon("postgresql://neondb_owner:npg_6SJaPceBxUE5@ep-fragrant-dream-adwyedn3-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require");
+const db = drizzle(sql);
 
-// User operations
 export const userOperations = {
     // Create a new user
-    async create(userData: NewUser): Promise<User> {
-        const newUser: User = {
-            id: userIdCounter++,
-            clerkId: userData.clerkId,
-            name: userData.name || null,
-            email: userData.email || null,
-            imageUrl: userData.imageUrl || null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-        mockUsers.push(newUser);
-        return newUser;
-    },
+    async createUser(userData: { clerkId: string; email: string; firstName?: string; lastName?: string; preferences?: string[]; dietaryRestrictions?: string[]; imageUrl?: string }): Promise<User> {
+        try {
+            console.log("Creating user in database:", userData);
 
-    // Get user by ID
-    async getById(id: number): Promise<User | undefined> {
-        return mockUsers.find((user) => user.id === id);
-    },
+            // Insert user into Neon database using Drizzle
+            const [newUser] = await db
+                .insert(users)
+                .values({
+                    clerkId: userData.clerkId,
+                    email: userData.email,
+                    firstName: userData.firstName || null,
+                    lastName: userData.lastName || null,
+                    preferences: userData.preferences || [],
+                    dietaryRestrictions: userData.dietaryRestrictions || [],
+                    imageUrl: userData.imageUrl || null,
+                    ingredients: [],
+                    customIngredients: [],
+                    customCuisines: [],
+                    customDietary: [],
+                    skillLevel: null,
+                    timePreference: null,
+                    mealTypes: [],
+                    flavorProfiles: [],
+                })
+                .returning();
 
-    // Get user by email
-    async getByEmail(email: string): Promise<User | undefined> {
-        return mockUsers.find((user) => user.email === email);
+            console.log("User created successfully in database:", newUser);
+            return newUser;
+        } catch (error) {
+            console.error("Error creating user in database:", error);
+            throw error;
+        }
     },
 
     // Get user by Clerk ID
-    async getByClerkId(clerkId: string): Promise<User | undefined> {
-        return mockUsers.find((user) => user.clerkId === clerkId);
-    },
+    async getUserByClerkId(clerkId: string): Promise<User | null> {
+        try {
+            console.log("Getting user by clerk ID from database:", clerkId);
 
-    // Get all users
-    async getAll(): Promise<User[]> {
-        return [...mockUsers];
-    },
+            // Query Neon database using Drizzle
+            const result = await db.select().from(users).where(eq(users.clerkId, clerkId));
 
-    // Update user
-    async update(id: number, userData: Partial<NewUser>): Promise<User | undefined> {
-        const userIndex = mockUsers.findIndex((user) => user.id === id);
-        if (userIndex === -1) return undefined;
+            if (result.length === 0) {
+                console.log("User not found in database");
+                return null;
+            }
 
-        const updatedUser = {
-            ...mockUsers[userIndex],
-            ...userData,
-            updatedAt: new Date(),
-        };
-        mockUsers[userIndex] = updatedUser;
-        return updatedUser;
-    },
-
-    // Delete user
-    async delete(id: number): Promise<void> {
-        const userIndex = mockUsers.findIndex((user) => user.id === id);
-        if (userIndex !== -1) {
-            mockUsers.splice(userIndex, 1);
+            console.log("User found in database:", result[0]);
+            return result[0];
+        } catch (error) {
+            console.error("Error getting user by clerk ID:", error);
+            return null;
         }
     },
-};
 
-// Recipe operations
-export const recipeOperations = {
-    // Create a new recipe
-    async create(recipeData: NewRecipe): Promise<Recipe> {
-        const newRecipe: Recipe = {
-            id: recipeIdCounter++,
-            title: recipeData.title,
-            description: recipeData.description || null,
-            ingredients: recipeData.ingredients,
-            instructions: recipeData.instructions,
-            cookingTime: recipeData.cookingTime || null,
-            difficulty: recipeData.difficulty || null,
-            userId: recipeData.userId || 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-        mockRecipes.push(newRecipe);
-        return newRecipe;
+    // Get user by email
+    async getUserByEmail(email: string): Promise<User | null> {
+        try {
+            console.log("Getting user by email from database:", email);
+
+            // Query Neon database using Drizzle
+            const result = await db.select().from(users).where(eq(users.email, email));
+
+            if (result.length === 0) {
+                console.log("User not found in database");
+                return null;
+            }
+
+            console.log("User found in database:", result[0]);
+            return result[0];
+        } catch (error) {
+            console.error("Error getting user by email:", error);
+            return null;
+        }
     },
 
-    // Get recipe by ID
-    async getById(id: number): Promise<Recipe | undefined> {
-        return mockRecipes.find((recipe) => recipe.id === id);
+    // Update user profile
+    async updateUser(
+        clerkId: string,
+        updates: {
+            firstName?: string;
+            lastName?: string;
+            preferences?: string[];
+            dietaryRestrictions?: string[];
+            imageUrl?: string;
+        }
+    ): Promise<User | null> {
+        try {
+            console.log("Updating user in database:", clerkId, updates);
+
+            // Update user in Neon database using Drizzle
+            const [updatedUser] = await db
+                .update(users)
+                .set({
+                    ...updates,
+                    updatedAt: new Date(),
+                })
+                .where(eq(users.clerkId, clerkId))
+                .returning();
+
+            if (!updatedUser) {
+                console.log("User not found for update");
+                return null;
+            }
+
+            console.log("User updated successfully in database:", updatedUser);
+            return updatedUser;
+        } catch (error) {
+            console.error("Error updating user:", error);
+            return null;
+        }
     },
 
-    // Get all recipes
-    async getAll(): Promise<Recipe[]> {
-        return [...mockRecipes];
+    // Check if user exists
+    async userExists(clerkId: string): Promise<boolean> {
+        const user = await this.getUserByClerkId(clerkId);
+        return !!user;
     },
 
-    // Get recipes by user ID
-    async getByUserId(userId: number): Promise<Recipe[]> {
-        return mockRecipes.filter((recipe) => recipe.userId === userId);
-    },
+    // Get user by ID (for internal use)
+    async getUserById(id: number): Promise<User | null> {
+        try {
+            console.log("Getting user by ID from database:", id);
 
-    // Update recipe
-    async update(id: number, recipeData: Partial<NewRecipe>): Promise<Recipe | undefined> {
-        const recipeIndex = mockRecipes.findIndex((recipe) => recipe.id === id);
-        if (recipeIndex === -1) return undefined;
+            // Query Neon database using Drizzle
+            const result = await db.select().from(users).where(eq(users.id, id));
 
-        const updatedRecipe = {
-            ...mockRecipes[recipeIndex],
-            ...recipeData,
-            updatedAt: new Date(),
-        };
-        mockRecipes[recipeIndex] = updatedRecipe;
-        return updatedRecipe;
-    },
+            if (result.length === 0) {
+                console.log("User not found in database");
+                return null;
+            }
 
-    // Delete recipe
-    async delete(id: number): Promise<void> {
-        const recipeIndex = mockRecipes.findIndex((recipe) => recipe.id === id);
-        if (recipeIndex !== -1) {
-            mockRecipes.splice(recipeIndex, 1);
+            console.log("User found in database:", result[0]);
+            return result[0];
+        } catch (error) {
+            console.error("Error getting user by ID:", error);
+            return null;
         }
     },
 };
