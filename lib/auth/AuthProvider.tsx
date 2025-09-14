@@ -1,6 +1,6 @@
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { userOperations } from "../db/operations";
+import { userAPI } from "../api/users";
 import { User } from "../db/schema";
 
 interface AuthContextType {
@@ -25,18 +25,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (clerkUser && isSignedIn) {
             try {
                 // Try to get user from our database
-                let dbUserData = await userOperations.getUserByClerkId(clerkUser.id);
+                let dbUserData = await userAPI.getUserByClerkId(clerkUser.id);
 
                 // If user doesn't exist in our DB, create them
                 if (!dbUserData) {
-                    dbUserData = await userOperations.createUser({
+                    dbUserData = await userAPI.createOrUpdateUser({
                         clerkId: clerkUser.id,
                         email: clerkUser.emailAddresses[0]?.emailAddress || "",
                         firstName: clerkUser.firstName || "",
                         lastName: clerkUser.lastName || "",
                         imageUrl: clerkUser.imageUrl || "",
-                        preferences: [],
-                        dietaryRestrictions: [],
+                    });
+                }
+
+                // Parse JSON strings to arrays if needed
+                if (dbUserData) {
+                    const jsonFields = ['preferences', 'dietaryRestrictions', 'ingredients', 'customIngredients', 'customCuisines', 'customDietary', 'mealTypes', 'flavorProfiles'];
+                    jsonFields.forEach(field => {
+                        if (typeof dbUserData[field] === 'string') {
+                            dbUserData[field] = JSON.parse(dbUserData[field]);
+                        }
                     });
                 }
 
@@ -60,18 +68,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     setUser(clerkUser);
 
                     // Try to get user from our database
-                    let dbUserData = await userOperations.getUserByClerkId(clerkUser.id);
+                    let dbUserData = await userAPI.getUserByClerkId(clerkUser.id);
 
                     // If user doesn't exist in our DB, create them
                     if (!dbUserData) {
-                        dbUserData = await userOperations.createUser({
+                        dbUserData = await userAPI.createOrUpdateUser({
                             clerkId: clerkUser.id,
                             email: clerkUser.emailAddresses[0]?.emailAddress || "",
                             firstName: clerkUser.firstName || "",
                             lastName: clerkUser.lastName || "",
                             imageUrl: clerkUser.imageUrl || "",
-                            preferences: [],
-                            dietaryRestrictions: [],
+                        });
+                    }
+
+                    // Parse JSON strings to arrays if needed
+                    if (dbUserData) {
+                        const jsonFields = ['preferences', 'dietaryRestrictions', 'ingredients', 'customIngredients', 'customCuisines', 'customDietary', 'mealTypes', 'flavorProfiles'];
+                        jsonFields.forEach(field => {
+                            if (typeof dbUserData[field] === 'string') {
+                                dbUserData[field] = JSON.parse(dbUserData[field]);
+                            }
                         });
                     }
 

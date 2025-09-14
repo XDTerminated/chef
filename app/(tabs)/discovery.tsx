@@ -1,5 +1,6 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Recipe, toolhouseAPI } from "@/lib/services/toolhouse-api";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -51,6 +52,7 @@ const RecipeCard = ({ recipe, index, onPress }: { recipe: Recipe; index: number;
 };
 
 export default function DiscoveryScreen() {
+    const router = useRouter();
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<Recipe[]>([]);
@@ -247,7 +249,9 @@ export default function DiscoveryScreen() {
                             <IconSymbol name="xmark" size={24} color="#333" />
                         </Pressable>
                         <Text style={styles.modalTitle}>Recipe Details</Text>
-                        <View style={styles.placeholder} />
+                        <Pressable style={styles.aiChatButton} onPress={() => router.push('/ai-chat')}>
+                            <IconSymbol name="sparkles" size={20} color="#fff" />
+                        </Pressable>
                     </View>
 
                     {selectedRecipe && (
@@ -301,35 +305,43 @@ export default function DiscoveryScreen() {
                                 )}
 
                                 {/* Ingredients */}
-                                <View style={styles.section}>
+                                <View style={styles.modalSection}>
                                     <Text style={styles.modalSectionTitle}>Ingredients</Text>
-                                    {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 ? (
-                                        selectedRecipe.ingredients.map((ingredient, index) => (
-                                            <View key={index} style={styles.ingredientItem}>
-                                                <Text style={styles.bulletPoint}>•</Text>
-                                                <Text style={styles.ingredientText}>{ingredient}</Text>
-                                            </View>
-                                        ))
-                                    ) : (
-                                        <Text style={styles.noDataText}>No ingredients listed</Text>
-                                    )}
+                                    <View style={styles.ingredientsContainer}>
+                                        {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 ? (
+                                            selectedRecipe.ingredients.map((ingredient, index) => (
+                                                <View key={index} style={styles.ingredientCard}>
+                                                    <View style={styles.ingredientIcon}>
+                                                        <Text style={styles.ingredientIconText}>🥄</Text>
+                                                    </View>
+                                                    <Text style={styles.ingredientText}>{ingredient}</Text>
+                                                </View>
+                                            ))
+                                        ) : (
+                                            <Text style={styles.noDataText}>No ingredients listed</Text>
+                                        )}
+                                    </View>
                                 </View>
 
                                 {/* Instructions */}
-                                <View style={styles.section}>
+                                <View style={styles.modalSection}>
                                     <Text style={styles.modalSectionTitle}>Instructions</Text>
-                                    {selectedRecipe.instructions && selectedRecipe.instructions.length > 0 ? (
-                                        selectedRecipe.instructions.map((instruction, index) => (
-                                            <View key={index} style={styles.instructionItem}>
-                                                <View style={styles.stepNumber}>
-                                                    <Text style={styles.stepNumberText}>{index + 1}</Text>
+                                    <View style={styles.instructionsContainer}>
+                                        {selectedRecipe.instructions && selectedRecipe.instructions.length > 0 ? (
+                                            selectedRecipe.instructions.map((instruction, index) => (
+                                                <View key={index} style={styles.instructionCard}>
+                                                    <View style={styles.stepNumber}>
+                                                        <Text style={styles.stepNumberText}>{index + 1}</Text>
+                                                    </View>
+                                                    <View style={styles.instructionContent}>
+                                                        <Text style={styles.instructionText}>{instruction}</Text>
+                                                    </View>
                                                 </View>
-                                                <Text style={styles.instructionText}>{instruction}</Text>
-                                            </View>
-                                        ))
-                                    ) : (
-                                        <Text style={styles.noDataText}>No instructions listed</Text>
-                                    )}
+                                            ))
+                                        ) : (
+                                            <Text style={styles.noDataText}>No instructions listed</Text>
+                                        )}
+                                    </View>
                                 </View>
                             </View>
                         </ScrollView>
@@ -595,14 +607,19 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 24,
+        paddingTop: 32,
         borderBottomWidth: 1,
         borderBottomColor: "#eee",
     },
     modalCloseButton: {
-        padding: 8,
-        borderRadius: 20,
+        padding: 12,
+        borderRadius: 24,
         backgroundColor: "#f5f5f5",
+        width: 48,
+        height: 48,
+        justifyContent: "center",
+        alignItems: "center",
     },
     modalTitle: {
         fontSize: 18,
@@ -611,6 +628,22 @@ const styles = StyleSheet.create({
     },
     placeholder: {
         width: 40,
+    },
+    aiChatButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "#FF8C00",
+        justifyContent: "center",
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 4,
     },
     modalContent: {
         flex: 1,
@@ -683,51 +716,74 @@ const styles = StyleSheet.create({
         color: "#333",
         marginBottom: 12,
     },
-    ingredientItem: {
+    modalSection: {
+        marginBottom: 24,
+    },
+    ingredientsContainer: {
+        gap: 8,
+    },
+    ingredientCard: {
         flexDirection: "row",
-        alignItems: "flex-start",
-        marginBottom: 8,
-        paddingRight: 20,
+        alignItems: "center",
+        backgroundColor: "#f8f9fa",
+        padding: 12,
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: "#FF8C00",
     },
-    bulletPoint: {
-        fontSize: 16,
-        color: "#FF8C00",
-        marginRight: 12,
-        marginTop: 2,
-        fontWeight: "bold",
-    },
-    ingredientText: {
-        fontSize: 14,
-        color: "#444",
-        lineHeight: 20,
-        flex: 1,
-    },
-    instructionItem: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        marginBottom: 16,
-        paddingRight: 20,
-    },
-    stepNumber: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: "#FF8C00",
+    ingredientIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: "#fff5e6",
         justifyContent: "center",
         alignItems: "center",
         marginRight: 12,
+    },
+    ingredientIconText: {
+        fontSize: 16,
+    },
+    ingredientText: {
+        fontSize: 14,
+        color: "#333",
+        fontWeight: "500",
+        flex: 1,
+    },
+    instructionsContainer: {
+        gap: 12,
+    },
+    instructionCard: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        backgroundColor: "#f8f9fa",
+        padding: 16,
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: "#FF8C00",
+    },
+    stepNumber: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: "#FF8C00",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 16,
         marginTop: 2,
     },
     stepNumberText: {
         color: "#fff",
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: "bold",
     },
-    instructionText: {
-        fontSize: 14,
-        color: "#444",
-        lineHeight: 22,
+    instructionContent: {
         flex: 1,
+    },
+    instructionText: {
+        fontSize: 15,
+        color: "#333",
+        lineHeight: 24,
+        fontWeight: "400",
     },
     noDataText: {
         fontSize: 14,

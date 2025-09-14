@@ -88,7 +88,18 @@ app.post('/api/users', async (req, res) => {
 app.put('/api/users/:clerkId/profile', async (req, res) => {
   try {
     const { clerkId } = req.params;
-    const { preferences, dietaryRestrictions } = req.body;
+    const { 
+      preferences, 
+      dietaryRestrictions, 
+      ingredients,
+      customIngredients,
+      customCuisines,
+      customDietary,
+      skillLevel,
+      timePreference,
+      mealTypes,
+      flavorProfiles
+    } = req.body;
 
     // Update user profile
     const updatedUser = await client`
@@ -96,6 +107,14 @@ app.put('/api/users/:clerkId/profile', async (req, res) => {
       SET 
         "preferences" = ${JSON.stringify(preferences || [])}::json,
         "dietary_restrictions" = ${JSON.stringify(dietaryRestrictions || [])}::json,
+        "ingredients" = ${JSON.stringify(ingredients || [])}::json,
+        "custom_ingredients" = ${JSON.stringify(customIngredients || [])}::json,
+        "custom_cuisines" = ${JSON.stringify(customCuisines || [])}::json,
+        "custom_dietary" = ${JSON.stringify(customDietary || [])}::json,
+        "skill_level" = ${skillLevel || null},
+        "time_preference" = ${timePreference || null},
+        "meal_types" = ${JSON.stringify(mealTypes || [])}::json,
+        "flavor_profiles" = ${JSON.stringify(flavorProfiles || [])}::json,
         "updated_at" = NOW()
       WHERE "clerk_id" = ${clerkId}
       RETURNING *;
@@ -109,7 +128,9 @@ app.put('/api/users/:clerkId/profile', async (req, res) => {
       id: updatedUser[0].id,
       email: updatedUser[0].email,
       preferences: updatedUser[0].preferences,
-      dietaryRestrictions: updatedUser[0].dietary_restrictions
+      dietaryRestrictions: updatedUser[0].dietary_restrictions,
+      skillLevel: updatedUser[0].skill_level,
+      timePreference: updatedUser[0].time_preference
     });
 
     res.json({ 

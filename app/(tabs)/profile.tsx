@@ -58,7 +58,11 @@ export default function ProfileScreen() {
                 <View style={styles.profileSection}>
                     {user.imageUrl && <Image source={{ uri: user.imageUrl }} style={styles.avatar} />}
                     <View style={styles.userInfo}>
-                        <Text style={styles.name}>{user.name || "Anonymous User"}</Text>
+                        <Text style={styles.name}>
+                            {dbUser?.firstName && dbUser?.lastName 
+                                ? `${dbUser.firstName} ${dbUser.lastName}` 
+                                : user.name || "Anonymous User"}
+                        </Text>
                         <Text style={styles.email}>{user.email}</Text>
                         <Text style={styles.joinDate}>Member since {new Date(user.createdAt!).toLocaleDateString()}</Text>
                     </View>
@@ -87,14 +91,54 @@ export default function ProfileScreen() {
                 <View style={styles.preferencesSection}>
                     <Text style={styles.sectionTitle}>Your Preferences</Text>
                     <View style={styles.preferencesGrid}>
+                        {dbUser?.skillLevel && (
+                            <View style={styles.preferenceItem}>
+                                <Text style={styles.preferenceLabel}>Cooking Level</Text>
+                                <Text style={styles.preferenceValue}>{dbUser.skillLevel}</Text>
+                            </View>
+                        )}
+                        {dbUser?.timePreference && (
+                            <View style={styles.preferenceItem}>
+                                <Text style={styles.preferenceLabel}>Time Preference</Text>
+                                <Text style={styles.preferenceValue}>{dbUser.timePreference}</Text>
+                            </View>
+                        )}
                         <View style={styles.preferenceItem}>
                             <Text style={styles.preferenceLabel}>Dietary</Text>
-                            <Text style={styles.preferenceValue}>{dbUser?.dietaryRestrictions && dbUser.dietaryRestrictions.length > 0 ? dbUser.dietaryRestrictions.join(", ") : "Not set"}</Text>
+                            <Text style={styles.preferenceValue}>
+                                {dbUser?.dietaryRestrictions && dbUser.dietaryRestrictions.length > 0 
+                                    ? [...dbUser.dietaryRestrictions, ...(dbUser.customDietary || [])].join(", ") 
+                                    : "Not set"}
+                            </Text>
                         </View>
                         <View style={styles.preferenceItem}>
                             <Text style={styles.preferenceLabel}>Cuisines</Text>
-                            <Text style={styles.preferenceValue}>{dbUser?.preferences && dbUser.preferences.length > 0 ? dbUser.preferences.join(", ") : "Not set"}</Text>
+                            <Text style={styles.preferenceValue}>
+                                {dbUser?.preferences && dbUser.preferences.length > 0 
+                                    ? [...dbUser.preferences, ...(dbUser.customCuisines || [])].join(", ") 
+                                    : "Not set"}
+                            </Text>
                         </View>
+                        {dbUser?.ingredients && dbUser.ingredients.length > 0 && (
+                            <View style={styles.preferenceItem}>
+                                <Text style={styles.preferenceLabel}>Ingredients</Text>
+                                <Text style={styles.preferenceValue}>
+                                    {[...dbUser.ingredients, ...(dbUser.customIngredients || [])].join(", ")}
+                                </Text>
+                            </View>
+                        )}
+                        {dbUser?.mealTypes && dbUser.mealTypes.length > 0 && (
+                            <View style={styles.preferenceItem}>
+                                <Text style={styles.preferenceLabel}>Meal Types</Text>
+                                <Text style={styles.preferenceValue}>{dbUser.mealTypes.join(", ")}</Text>
+                            </View>
+                        )}
+                        {dbUser?.flavorProfiles && dbUser.flavorProfiles.length > 0 && (
+                            <View style={styles.preferenceItem}>
+                                <Text style={styles.preferenceLabel}>Flavors</Text>
+                                <Text style={styles.preferenceValue}>{dbUser.flavorProfiles.join(", ")}</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 
